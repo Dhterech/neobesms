@@ -1,0 +1,6 @@
+.vscode/*
+ws/*
+doc/*
+
+*.obj
+*.pdb
