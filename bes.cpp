@@ -771,7 +771,7 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     else if(k == VK_F5) {
         stageinfo_t si = getcurrentstageinfo();
         u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
-        u32 origsize = si.buttondataend - si.buttondatabase + 1;
+        u32 origsize = (pal ? si.buttondataendP : si.buttondataend) - (pal ? si.buttondatabaseP : si.buttondatabase) + 1;
         if(totalsize > origsize) {
             showerror(L" Error: Data too large!");
             conscr::refresh();
@@ -780,7 +780,7 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
         }
         showerror(L" Status: Uploading...");
         conscr::refresh();
-        pcsx2upload(records, commands, oopsdat, oopslen, si.buttondatabase, si.buttondataend, si.stagemodelistbase, pal);
+        pcsx2upload(records, commands, oopsdat, oopslen, (pal ? si.buttondatabaseP : si.buttondatabase), (pal ? si.buttondataendP : si.buttondataend), (pal ? si.stagemodelistbaseP : si.stagemodelistbase), pal);
     }
 	else if(k == VK_ESCAPE) { menu_options = true; }
 }
