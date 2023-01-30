@@ -52,7 +52,7 @@ int current_stage = 0;
 #define NCURRENT_STAGE 0x000386930
 
 #define PGAME_FRAMERATE 50
-#define PRESOURCE_LIST_BASE 0x1C46100 // Old non working 0x1C4A000
+#define PRESOURCE_LIST_BASE 0x1C46100
 #define PCURRENT_STAGE 0x1C6BB70
 
 int subcount = 2;
@@ -770,7 +770,7 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
 	// Menu Options
     else if(k == VK_F5) {
         stageinfo_t si = getcurrentstageinfo();
-        u32 totalsize = pcsx2calcsize(records, commands, oopslen);
+        u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
         u32 origsize = si.buttondataend - si.buttondatabase + 1;
         if(totalsize > origsize) {
             showerror(L" Error: Data too large!");
@@ -1012,9 +1012,10 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
 		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); }
         conscr::refresh(); waitkey();
     }
-    else if(k == VK_F3) {
+    else if(k == VK_F3 || k == VK_F6) {
         int l = conscr::query_string(L"Load Path: ", filename, MAX_PATH);
         if(l == 0) return;
+        if(k == VK_F6) neosubtitles = false; else neosubtitles = true;
         if(doloadproject(filename)) { menu_options = false; }
 		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); conscr::refresh(); waitkey(); }
     }
@@ -1171,8 +1172,8 @@ void drawinfo(int x, int y) {
         conscr::writescol(x+1,y+2,gbuf,FOREGROUND_WHITE);
     } else conscr::writescol(x+1,y+2,L"Not linked",FOREGROUND_INTENSITY);
 
-    u32 totalsize = pcsx2calcsize(records, commands, oopslen);
-    u32 origsize = stages[current_stage].buttondataend - stages[current_stage].buttondatabase + 1;
+    u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
+    u32 origsize = (pal ? stages[current_stage].buttondataendP : stages[current_stage].buttondataend) - (pal ? stages[current_stage].buttondatabaseP : stages[current_stage].buttondatabase) + 1;
 
     WORD attr = (totalsize > origsize) ? (FG_RED) : (FG_GREEN);
 

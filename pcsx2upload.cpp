@@ -4,7 +4,7 @@
 #include <memory.h>
 #include <Windows.h>
 
-u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbuffer_t> *buffers, int oopslen) {
+u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbuffer_t> *buffers, int oopslen, bool isPAL) {
     u32 acc = 0;
     acc += sizeof(suggestrecord_t) * records.size();
 
@@ -13,7 +13,10 @@ u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbu
         for(int k = 0; k < 17; k += 1) {
             e_suggestvariant_t &variant = record.variants[k];
             if(variant.islinked == false) {
-                acc += sizeof(suggestline_t) * variant.lines.size();
+                int linesize;
+                if(isPAL) linesize = sizeof(suggestline_t_pal);
+                else linesize = sizeof(suggestline_t);
+                acc += linesize * variant.lines.size();
                 for(int m = 0; m < variant.lines.size(); m += 1) {
                     e_suggestline_t &line = variant.lines[m];
                     acc += sizeof(suggestbutton_t) * line.buttons.size();
@@ -73,7 +76,7 @@ bool pcsx2upload(
     scenemode_t modes[9];
     //getmetabases(stagemodelistbase, mb);
     u32 count = dataend - datastart + 1;
-    if(pcsx2calcsize(records, buffers, oopslen) > count) return false;
+    if(pcsx2calcsize(records, buffers, oopslen, isPAL) > count) return false;
     DOWNLOAD_SIZE(stagemodelistbase, modes[0], sizeof(modes));
     for(int i = 0; i < 9; i += 1) {
         mb[i] = a;
@@ -113,13 +116,13 @@ bool pcsx2upload(
                 suggestline_t ps2line;
                 suggestline_t_pal ps2lineP;
 
-                for(int n = 0; n < line.buttons.size(); n += 1) {
-                    suggestbutton_t &button = line.buttons[n];
-                    UPLOAD(buttonbase, button);
-                }
                 if(!isPAL) {
                     ps2line.buttoncount = line.buttons.size();
                     ps2line.ptr_buttons = buttonbase;
+                    for(int n = 0; n < line.buttons.size(); n += 1) {
+                        suggestbutton_t &button = line.buttons[n];
+                        UPLOAD(buttonbase, button);
+                    }
                     ps2line.always_zero = 0;
                     ps2line.coolmodethreshold = line.coolmodethreshold;
                     for(int t = 0; t < 4; t += 1) {ps2line.localisations[t] = u32(~0);}
@@ -132,6 +135,10 @@ bool pcsx2upload(
                 } else {
                     ps2lineP.buttoncount = line.buttons.size();
                     ps2lineP.ptr_buttons = buttonbase;
+                    for(int n = 0; n < line.buttons.size(); n += 1) {
+                        suggestbutton_t &button = line.buttons[n];
+                        UPLOAD(buttonbase, button);
+                    }
                     ps2lineP.always_zero = 0;
                     ps2lineP.coolmodethreshold = line.coolmodethreshold;
                     for(int t = 0; t < 7; t += 1) {ps2lineP.localisations[t] = u32(~0);}
@@ -227,7 +234,7 @@ bool olmupload(wchar_t *filename,
     scenemode_t modes[9];
     //getmetabases(stagemodelistbase, mb);
     u32 count = dataend - datastart + 1;
-    if(pcsx2calcsize(records, buffers, oopslen) > count) return false;
+    if(pcsx2calcsize(records, buffers, oopslen, isPAL) > count) return false;
     DOWNLOAD_SIZE(stagemodelistbase, modes[0], sizeof(modes));
     for(int i = 0; i < 9; i += 1) {
         mb[i] = a;
@@ -269,13 +276,13 @@ bool olmupload(wchar_t *filename,
                 //if(pal) generateLineP(line, ps2line);
                 //else generateLine(line, ps2line);
                 //in
-                for(int n = 0; n < line.buttons.size(); n += 1) {
-                    suggestbutton_t &button = line.buttons[n];
-                    UPLOAD(buttonbase, button);
-                }
                 if(!isPAL) {
                     ps2line.buttoncount = line.buttons.size();
                     ps2line.ptr_buttons = buttonbase;
+                    for(int n = 0; n < line.buttons.size(); n += 1) {
+                        suggestbutton_t &button = line.buttons[n];
+                        UPLOAD(buttonbase, button);
+                    }
                     ps2line.always_zero = 0;
                     ps2line.coolmodethreshold = line.coolmodethreshold;
                     for(int t = 0; t < 4; t += 1) {ps2line.localisations[t] = u32(~0);}
@@ -288,6 +295,10 @@ bool olmupload(wchar_t *filename,
                 } else {
                     ps2lineP.buttoncount = line.buttons.size();
                     ps2lineP.ptr_buttons = buttonbase;
+                    for(int n = 0; n < line.buttons.size(); n += 1) {
+                        suggestbutton_t &button = line.buttons[n];
+                        UPLOAD(buttonbase, button);
+                    }
                     ps2lineP.always_zero = 0;
                     ps2lineP.coolmodethreshold = line.coolmodethreshold;
                     for(int t = 0; t < 7; t += 1) {ps2lineP.localisations[t] = u32(~0);}

@@ -46,7 +46,7 @@ void pcsx2DwnlKeytables(
 u32 pcsx2calcsize(
     std::vector<e_suggestrecord_t> &records,
     std::vector<commandbuffer_t> *commands,
-    int oopslen);
+    int oopslen, bool isPAL);
 bool pcsx2upload(
     std::vector<e_suggestrecord_t> &records,
     std::vector<commandbuffer_t> *commands,

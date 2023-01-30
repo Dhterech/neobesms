@@ -14,8 +14,8 @@ stageinfo_t stages[8] = {
 		
 		0x01D31988,//0x01D35210,
 		0x01CD4908,
-		0x01CD4A28,
-		0x01D2FF28 + 0xD30 - 1
+		0x01CD4A28,//0x01CD4A28,
+		0x01D30C58 + 0xD30 - 1,//0x01D2FF28 + 0xD30 - 1
     },
     {
         L"Romantic Love",
