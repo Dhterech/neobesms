@@ -972,7 +972,7 @@ bool doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 30/31/2023",
+	L"NeoBesms 31/01/2023",
     (pal ? L"Current region: PAL" : L"Current region: NTSC"),
 	L"",
     L"[F01] Save Project",
