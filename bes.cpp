@@ -53,7 +53,7 @@ int current_stage = 0;
 
 #define PGAME_FRAMERATE 50
 #define PRESOURCE_LIST_BASE 0x1C46100
-#define PCURRENT_STAGE 0x1C6BB70
+#define PCURRENT_STAGE 0x1C63A74//0x1C6BB70
 
 int subcount = 2;
 bool pal = false;
@@ -221,7 +221,6 @@ bool testdownload() {
     showerror(L" Status: Reading current stage..."); conscr::refresh();
 	
     pcsx2reader::read(CURRENT_STAGE, &current_stage, 1); current_stage -= 1;
-    if(pal) current_stage += 1;
     showerror(L" Status: Getting stage info & database..."); conscr::refresh();
     stageinfo_t si = getcurrentstageinfo();
     u32 hdlistbase = findhdbase(RESOURCE_LIST_BASE);
