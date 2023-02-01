@@ -151,17 +151,12 @@ bool linereffromsubdot(e_suggestvariant_t &variant, int owner, u32 subdot, e_sug
     return false;
 }
 
-struct playtoken_t {
-    double when;
-    int soundid;
-};
-
+struct playtoken_t { double when; int soundid; };
 double bpmtospsd(double bpm) { return (15.0 / bpm) / 24.0; }
 bool tokensorter(playtoken_t a, playtoken_t b) { return (a.when < b.when); }
 
-void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm) {
-    std::vector<playtoken_t> tokens;
-    playtoken_t token;
+void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm, bool tick) {
+    std::vector<playtoken_t> tokens; playtoken_t token;
     double spsd = bpmtospsd(bpm);
     for(const e_suggestline_t &line : variant.lines) {
         for(const suggestbutton_t &button : line.buttons) {
@@ -177,8 +172,7 @@ void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm)
     }
     std::sort(tokens.begin(), tokens.end(), tokensorter);
 
-    conscr::writes(0,0,L"Press any key to stop playback");
-    conscr::refresh();
+    conscr::writes(0,0,L" Press any key to stop playback"); conscr::refresh();
 
     double nexttick = 0.0;
     double secondsperbeat = 60.0/bpm;
@@ -187,54 +181,48 @@ void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm)
         double rtime;
         do {
             rtime = gettime() - timebase;
-            if(rtime > nexttick) {
-                playticker();
-                nexttick += secondsperbeat;
-            }
+            if(rtime > nexttick && tick) { playticker(); nexttick += secondsperbeat; }
             if(conscr::hasinput()) {
                 INPUT_RECORD ir;
                 conscr::read(ir);
                 if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return;
             }
         } while(rtime <= tokens[i].when);
-        //snwprintf(gbuf, sizeof(gbuf), L"%02d", tokens[i].soundid);
-        //conscr::writes(0,0,gbuf);
-        //conscr::refresh();
         env.play(tokens[i].soundid);
     }
 }
 
 stageinfo_t getcurrentstageinfo() { return stages[current_stage]; } // Return from hardcoded Stage address/data list
 
-void cleartopline(int nchars) {
-    for(int i = 0; i < nchars; i += 1) conscr::putch(i,0,L' ');
-}
+void cleartopline(int nchars) { for(int i = 0; i < nchars; i += 1) conscr::putch(i,0,L' '); }
 
 void showerror(const wchar_t *msg) {
     cleartopline(80);
     conscr::writes(0,0,msg);
+    conscr::refresh();
 }
 
-bool testdownload() {
+int importFromEmulator() {
     current_stage = 0;
-    if(pcsx2reader::openpcsx2() == false) return false;
-    showerror(L" Status: Reading current stage..."); conscr::refresh();
+    if(!pcsx2reader::openpcsx2()) return 1;
+    showerror(L" Status: Reading current stage...");
 	
     pcsx2reader::read(CURRENT_STAGE, &current_stage, 1); current_stage -= 1;
-    showerror(L" Status: Getting stage info & database..."); conscr::refresh();
+    showerror(L" Status: Getting stage info & database...");
     stageinfo_t si = getcurrentstageinfo();
     u32 hdlistbase = findhdbase(RESOURCE_LIST_BASE);
     u32 bdlistbase = findbdbase(RESOURCE_LIST_BASE);
     int numhd = getnumhd(hdlistbase);
 
-    showerror(L" Status: Reading game data..."); conscr::refresh();
+    showerror(L" Status: Reading game data...");
     records.clear();
-    pcsx2GetRecFromModelist((pal ? si.stagemodelistbaseP : si.stagemodelistbase), records, pal);
-    pcsx2GetComBuffers((pal ? si.stagemodelistbaseP : si.stagemodelistbase), commands);
-    pcsx2GetSoundboards(hdlistbase, bdlistbase, numhd, soundboards);
-    pcsx2DwnlKeytables((pal ? si.keytablebaseP : si.keytablebase), numhd, 0, soundboards);
-
-    return true;
+    try{
+        pcsx2GetRecFromModelist((pal ? si.stagemodelistbaseP : si.stagemodelistbase), records, pal);
+        pcsx2GetComBuffers((pal ? si.stagemodelistbaseP : si.stagemodelistbase), commands);
+        pcsx2GetSoundboards(hdlistbase, bdlistbase, numhd, soundboards);
+        pcsx2DwnlKeytables((pal ? si.keytablebaseP : si.keytablebase), numhd, 0, soundboards);
+    } catch(...) { return 2; }
+    return 0;
 }
 
 #define FOREGROUND_GRAY (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED)
@@ -371,8 +359,7 @@ void domoveleftline(u32 subdot, int owner) {
 void domoverightline(u32 subdot, int owner) {
     e_suggestvariant_t &variant = getcurrentvariant();
     e_suggestline_t *pline = nullptr;
-    bool s = linereffromsubdot(variant, owner, subdot, &pline);
-    if(!s) {
+    if(!linereffromsubdot(variant, owner, subdot, &pline)) {
         pline = nullptr;
         for(int i = 0; i < variant.lines.size(); i += 1) {
             e_suggestline_t &line = variant.lines[i];
@@ -395,8 +382,7 @@ void domoverightline(u32 subdot, int owner) {
 void dorightexpand(u32 subdot, int owner) {
     e_suggestvariant_t &variant = getcurrentvariant();
     e_suggestline_t *pline = nullptr;
-    bool s = linereffromsubdot(variant, owner, subdot, &pline);
-    if(!s) {
+    if(!linereffromsubdot(variant, owner, subdot, &pline)) {
         pline = nullptr;
         for(int i = 0; i < variant.lines.size(); i += 1) {
             e_suggestline_t &line = variant.lines[i];
@@ -449,8 +435,7 @@ void docreatebutton(u32 subdot, int owner, int buttonid) {
 
     /* First check if the button exists, if yes, just change button id and leave */
     suggestbutton_t *bref;
-    bool s = buttonreffromsubdot(variant, owner, subdot, &bref);
-    if(s) { bref->buttonid = buttonid; return; }
+    if(buttonreffromsubdot(variant, owner, subdot, &bref)) { bref->buttonid = buttonid; return; }
 
     newbutton.buttonid = buttonid;
     for(soundentry_t &e : newbutton.sounds) {
@@ -478,8 +463,7 @@ void dodeletebutton(u32 subdot, int owner) {
         if(line.owner & u32(owner)) {
             if(line.containssubdot(subdot)) {
                 u32 rsubdot = subdot - line.timestamp_start;
-                int i;
-                for(i = 0; i < line.buttons.size(); i += 1) {
+                for(int i = 0; i < line.buttons.size(); i += 1) {
                     if(line.buttons[i].timestamp == rsubdot) {
                         line.buttons.erase(line.buttons.begin() + i);
                         return;
@@ -492,9 +476,7 @@ void dodeletebutton(u32 subdot, int owner) {
 
 void doincreaseparameter(int amount) {
     suggestbutton_t *button;
-    bool s = buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button);
-
-    if(s) {
+    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button)) {
         soundentry_t &se = button->sounds[paramcursory];
         switch(paramcursorx) {
         case 0:
@@ -516,9 +498,7 @@ void doincreaseparameter(int amount) {
 
 void dodecreaseparameter(int amount) {
     suggestbutton_t *button;
-    bool s = buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button);
-
-    if(s) {
+    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button)) {
         soundentry_t &se = button->sounds[paramcursory];
         switch(paramcursorx) {
         case 0:
@@ -540,8 +520,7 @@ void dodecreaseparameter(int amount) {
 
 void doadjustparameter() {
     suggestbutton_t *button;
-    bool s = buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button);
-    if(s) {
+    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button)) {
         soundentry_t &se = button->sounds[paramcursory];
         switch(paramcursorx) {
         case 0:
@@ -571,8 +550,7 @@ void dopastebutton(u32 subdot) {
     dodeletebutton(subdot, getcurrentowner());
     docreatebutton(subdot, getcurrentowner(), 1);
 
-    bool s = buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), subdot, &pbutton);
-    if(s) {
+    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), subdot, &pbutton)) {
         suggestbutton_t &tocopy = button_clipboard;
         pbutton->buttonid = tocopy.buttonid;
         for(int i = 0; i < 4; i += 1) pbutton->sounds[i] = tocopy.sounds[i];
@@ -595,7 +573,6 @@ void dodeleteline(int subdot, int owner) {
 void doadjustcoolthreshold(int amount) {
     e_suggestline_t *line;
     if(!linereffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(),&line)) return;
-
     line->coolmodethreshold = conscr::query_decimal(L" Input: Type new threshold: ");
 }
 
@@ -613,16 +590,9 @@ void doadjustlink() {
     if(linkid >= 17) {
         snwprintf(gbuf, 80, L" Error: Link identifier too high (%d)", linkid);
         showerror(gbuf);
-        conscr::refresh();
         waitkey();
         return;
-    } else if(linkid < 0) {
-        e_suggestvariant_t &variant = currentrecord.variants[current_variant];
-        variant.islinked = false;
-        variant.linknum = -1;
-        return;
-    }
-    if(linkid == current_variant) {
+    } else if(linkid == current_variant || linkid < 0) {
         e_suggestvariant_t &variant = currentrecord.variants[current_variant];
         variant.islinked = false;
         variant.linknum = -1;
@@ -630,7 +600,6 @@ void doadjustlink() {
     }
     if(currentrecord.variants[linkid].islinked) {
         showerror(L" Error: You can't link to a linked variant");
-        conscr::refresh();
         waitkey();
         return;
     }
@@ -754,11 +723,7 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     else if(k == 'P') {
         e_suggestvariant_t &variant = getcurrentvariant();
         loadsoundboard(currentrecord.soundboardid-1);
-        playvariant(
-            variant,
-            soundenv,
-            stages[current_stage].bpm
-        );
+        playvariant(variant, soundenv, stages[current_stage].bpm, !shiftmod);
     }
     else if(k == VK_TAB) {
         infocursor += 1;
@@ -766,22 +731,19 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     }
     else if(uc == '`') { doadjustinfo(); }
     else if(k == VK_RETURN) { doadjustparameter(); }
-	// Menu Options
+    else if(k == VK_ESCAPE) { menu_options = true; }
     else if(k == VK_F5) {
         stageinfo_t si = getcurrentstageinfo();
         u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
         u32 origsize = (pal ? si.buttondataendP : si.buttondataend) - (pal ? si.buttondatabaseP : si.buttondatabase) + 1;
         if(totalsize > origsize) {
-            showerror(L" Error: Data too large!");
-            conscr::refresh();
+            showerror(L" Error: Data too large! Link some lines to spare space.");
             waitkey();
             return;
         }
-        showerror(L" Status: Uploading...");
-        conscr::refresh();
+        showerror(L" Status: Uploading to PCSX2...");
         pcsx2upload(records, commands, oopsdat, oopslen, (pal ? si.buttondatabaseP : si.buttondatabase), (pal ? si.buttondataendP : si.buttondataend), (pal ? si.stagemodelistbaseP : si.stagemodelistbase), pal);
     }
-	else if(k == VK_ESCAPE) { menu_options = true; }
 }
 
 bool dosaveproject(wchar_t *name) {
@@ -796,8 +758,8 @@ bool dosaveproject(wchar_t *name) {
     );
 
     if(hfile == INVALID_HANDLE_VALUE) {
-        //snwprintf(gbuf, 80, L"%d", GetLastError());
-        //MessageBoxW(0,gbuf,0,0);
+        snwprintf(gbuf, 80, L"File cannot be saved in this location. Error: %d", GetLastError());
+        MessageBoxW(0,gbuf,0,0);
         return false;
     }
 
@@ -811,9 +773,7 @@ bool dosaveproject(wchar_t *name) {
         std::vector<commandbuffer_t> &buffer = commands[i];
         tmpu32 = u32(buffer.size());
         WRITE(tmpu32);
-        for(int k = 0; k < buffer.size(); k += 1) {
-            WRITE(buffer[k].data);
-        }
+        for(int k = 0; k < buffer.size(); k += 1) WRITE(buffer[k].data);
     }
     tmpu32 = records.size(); WRITE(tmpu32);
     for(int i = 0; i < records.size(); i += 1) {
@@ -890,7 +850,7 @@ bool doloadproject(wchar_t *name) {
     );
 
     if(hfile == INVALID_HANDLE_VALUE) {
-        snwprintf(gbuf, 80, L"%d", GetLastError());
+        snwprintf(gbuf, 80, L"File cannot be found/accessed. Error:%d", GetLastError());
         MessageBoxW(0,gbuf,0,0);
         return false;
     }
@@ -944,7 +904,6 @@ bool doloadproject(wchar_t *name) {
                     READ(button);
                 }
             }
-
         }
     }
 
@@ -999,24 +958,25 @@ void drawoptions() {
 void onoptionskey(int k, wchar_t uc, bool shiftmod) {
     wchar_t filename[MAX_PATH];
     if(k == VK_F9) {
-        current_record = 0;
-        current_variant = 0;
-        if(testdownload()) menu_options = false;
-        else { showerror(L" Error: PCSX2 process not found!"); conscr::refresh(); waitkey(); }
+        current_record = 0; current_variant = 0;
+        int result = importFromEmulator();
+        if(result == 0) menu_options = false;
+        else if(result == 1) { showerror(L" Error: PCSX2 process not found!"); waitkey(); }
+        else if(result == 2) { showerror(L" Error: Cannot load data correctly. Wrong region maybe?"); waitkey(); }
     }
     else if(k == VK_F1) {
         int l = conscr::query_string(L" Input: Save as: ", filename, MAX_PATH);
         if(l == 0) return;
         if(dosaveproject(filename)) { snwprintf(gbuf, 80, L"Saved as %ls", filename); showerror(gbuf); }
 		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); }
-        conscr::refresh(); waitkey();
+        waitkey();
     }
     else if(k == VK_F3 || k == VK_F6) {
         int l = conscr::query_string(L"Load Path: ", filename, MAX_PATH);
         if(l == 0) return;
         if(k == VK_F6) neosubtitles = false; else neosubtitles = true;
         if(doloadproject(filename)) { menu_options = false; }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); conscr::refresh(); waitkey(); }
+		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); waitkey(); }
     }
     else if(k == VK_F5) {
         int l = conscr::query_string(L" Input: OLM File Path: ", filename, MAX_PATH);
@@ -1026,7 +986,7 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
         bool s = olmupload(filename, records, commands, oopsdat, oopslen, si.buttondatabase, si.buttondataend, si.stagemodelistbase, pal);
         if(s) {snwprintf(gbuf, 80, L" Info: Injected %ls", filename); showerror(gbuf);}
         else snwprintf(gbuf, 80, L" Error: Failed to inject %ls", filename); showerror(gbuf);
-        conscr::refresh(); waitkey();
+        waitkey();
     }
 	else if(k == VK_F10) {
 		wchar_t *tmpr;
@@ -1045,10 +1005,10 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
             subcount = 7;
 			tmpr = L"PAL";
 		}
-        if(!menu_options) {snwprintf(gbuf, 80, L" Info: Switched to %ls", tmpr); showerror(gbuf); conscr::refresh(); waitkey();}
+        if(!menu_options) {snwprintf(gbuf, 80, L" Info: Switched to %ls", tmpr); showerror(gbuf); waitkey();}
     }
     else if(k == VK_ESCAPE) {
-	    if(records.size() == 0) {showerror(L" Error: No data loaded."); conscr::refresh(); waitkey();}
+	    if(records.size() == 0) {showerror(L" Error: No data loaded."); waitkey();}
 		else { menu_options = false; }
     }
 }
@@ -1169,7 +1129,7 @@ void drawinfo(int x, int y) {
     if(currentrecord.variants[current_variant].islinked) {
         snwprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
         conscr::writescol(x+1,y+2,gbuf,FOREGROUND_WHITE);
-    } else conscr::writescol(x+1,y+2,L"Not linked",FOREGROUND_INTENSITY);
+    } else conscr::writescol(x+1,y+2, L"Not linked",FOREGROUND_INTENSITY);
 
     u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
     u32 origsize = (pal ? stages[current_stage].buttondataendP : stages[current_stage].buttondataend) - (pal ? stages[current_stage].buttondatabaseP : stages[current_stage].buttondatabase) + 1;
@@ -1213,7 +1173,7 @@ void sandbox() {
 					ir.Event.KeyEvent.uChar.UnicodeChar,
 					ir.Event.KeyEvent.dwControlKeyState & SHIFT_PRESSED);}
 			}
-			if(menu_options) {drawoptions();} else {draw();}
+			if(menu_options) { drawoptions(); } else { draw(); }
 		}
     }
 }

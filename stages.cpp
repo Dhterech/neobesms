@@ -28,7 +28,7 @@ stageinfo_t stages[8] = {
         0x01D353E0,
 		0x01CE1510,
 		0x01CE1620,
-		0x01D7D380 + 0xAD0 - 1 // TODO: fix inject
+		0x01D34910 + 0xAD0 - 1
     },
     {
         L"BIG",
@@ -38,7 +38,7 @@ stageinfo_t stages[8] = {
         0x01CEB3B8,
         0x01D46F98 + 0xAD0 - 1,
 
-        0x01D988A8,
+        0x01D4B588,
 		0x01CEC0F8,
 		0x01CEC208,
 		0x01D4AAB8 + 0xAD0 - 1
