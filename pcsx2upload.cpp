@@ -273,9 +273,6 @@ bool olmupload(wchar_t *filename,
                 suggestline_t ps2line; // ps2 line
                 suggestline_t_pal ps2lineP; // ps2 line PAL
 
-                //if(pal) generateLineP(line, ps2line);
-                //else generateLine(line, ps2line);
-                //in
                 if(!isPAL) {
                     ps2line.buttoncount = line.buttons.size();
                     ps2line.ptr_buttons = buttonbase;

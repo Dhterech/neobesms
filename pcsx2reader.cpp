@@ -5,7 +5,11 @@
 namespace pcsx2reader {
 
 static HANDLE ps2_handle = NULL;
-#define PCSX2_BASE 0x20000000
+int PCSX2_BASE = 0x20000000;
+
+void setBaseAddr(int newBase) {
+    if(newBase > 0) PCSX2_BASE = newBase;
+}
 
 bool pcsx2opened() {
     DWORD ec;
@@ -28,20 +32,11 @@ static DWORD findprocessid(LPCWSTR name) {
         TH32CS_SNAPPROCESS,
         0
     );
-    if(INVALID_HANDLE_VALUE == snapshot) {
-        return 0;
-    }
+    if(INVALID_HANDLE_VALUE == snapshot) return 0;
 
     pe.dwSize = sizeof(pe);
-
-    BOOL success = Process32FirstW(
-        snapshot,
-        &pe
-    );
-
-    if(!success) {
-        return 0;
-    }
+    BOOL success = Process32FirstW(snapshot, &pe);
+    if(!success) return 0;
 
     do {
         if(lstrcmpW(pe.szExeFile, name) == 0) {
@@ -55,21 +50,18 @@ static DWORD findprocessid(LPCWSTR name) {
 }
 
 bool openpcsx2() {
-    if(pcsx2opened()) {
-        return true;
-    }
+    if(pcsx2opened()) return true;
 
-    DWORD pid = findprocessid(L"pcsx2-parappa.exe");
-	DWORD pid2 = findprocessid(L"pcsx2.exe");
-    if(pid == 0) {//209448
-		if(pid2 != 0) {pid = pid2;}
-        else {return false;}
+    wchar_t *pids[] = {L"pcsx2-parappa.exe", L"pcsx2.exe", L"pcsx2-qt.exe"};
+    DWORD pid;
+    for(wchar_t *p : pids) {
+        pid = findprocessid(p);
+        if(pid != 0) break;
     }
+    if(pid == 0) return false;
 
     ps2_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-    if(ps2_handle == NULL) {
-        return false;
-    }
+    if(ps2_handle == NULL) return false;
     return true;
 }
 

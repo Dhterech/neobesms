@@ -53,11 +53,11 @@ int current_stage = 0;
 
 #define PGAME_FRAMERATE 50
 #define PRESOURCE_LIST_BASE 0x1C46100
-#define PCURRENT_STAGE 0x1C63A74//0x1C6BB70
+#define PCURRENT_STAGE 0x1C63A74
 
 int subcount = 2;
 bool pal = false;
-bool neosubtitles = true;
+bool neosubtitles = false;
 int GAME_FRAMERATE = 60;
 int RESOURCE_LIST_BASE = 0x1C49480;
 int CURRENT_STAGE = 0x000386930;
@@ -931,12 +931,11 @@ bool doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 31/01/2023",
+	L"NeoBesms 01/02/2023",
     (pal ? L"Current region: PAL" : L"Current region: NTSC"),
 	L"",
     L"[F01] Save Project",
     L"[F03] Load Project",
-	L"[F06] Load Project (ptr2besms)",
     L"",
     L"[F05] Inject OLM",
     L"[F09] Download From PCSX2",
@@ -959,6 +958,9 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
     wchar_t filename[MAX_PATH];
     if(k == VK_F9) {
         current_record = 0; current_variant = 0;
+        if(shiftmod) {
+            pcsx2reader::setBaseAddr(conscr::query_hexU(L" Input: EE Memory Start Address (hex): "));
+        }
         int result = importFromEmulator();
         if(result == 0) menu_options = false;
         else if(result == 1) { showerror(L" Error: PCSX2 process not found!"); waitkey(); }
@@ -971,19 +973,19 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
 		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); }
         waitkey();
     }
-    else if(k == VK_F3 || k == VK_F6) {
+    else if(k == VK_F3) {
         int l = conscr::query_string(L"Load Path: ", filename, MAX_PATH);
         if(l == 0) return;
-        if(k == VK_F6) neosubtitles = false; else neosubtitles = true;
         if(doloadproject(filename)) { menu_options = false; }
 		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); waitkey(); }
     }
+    //else if(k == VK_F6) { neosubtitles = !neosubtitles; }
     else if(k == VK_F5) {
         int l = conscr::query_string(L" Input: OLM File Path: ", filename, MAX_PATH);
         if(l == 0) return;
         stageinfo_t si = getcurrentstageinfo();
 		
-        bool s = olmupload(filename, records, commands, oopsdat, oopslen, si.buttondatabase, si.buttondataend, si.stagemodelistbase, pal);
+        bool s = olmupload(filename, records, commands, oopsdat, oopslen, (pal ? si.buttondatabaseP : si.buttondatabase), (pal ? si.buttondataendP : si.buttondataend), (pal ? si.stagemodelistbaseP : si.stagemodelistbase), pal);
         if(s) {snwprintf(gbuf, 80, L" Info: Injected %ls", filename); showerror(gbuf);}
         else snwprintf(gbuf, 80, L" Error: Failed to inject %ls", filename); showerror(gbuf);
         waitkey();
@@ -1008,7 +1010,7 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
         if(!menu_options) {snwprintf(gbuf, 80, L" Info: Switched to %ls", tmpr); showerror(gbuf); waitkey();}
     }
     else if(k == VK_ESCAPE) {
-	    if(records.size() == 0) {showerror(L" Error: No data loaded."); waitkey();}
+	    if(records.size() == 0) {showerror(L" Error: No data loaded. Please load something from the menu."); waitkey();}
 		else { menu_options = false; }
     }
 }
@@ -1117,19 +1119,19 @@ void drawlineparameters(int x, int y) {
 
 void drawinfo(int x, int y) {
     snwprintf(gbuf, 80, L"Stage: %d  %ls", current_stage, stages[current_stage].name);
-    conscr::writescol(x, y-1, gbuf, FOREGROUND_GRAY);
-
-    snwprintf(gbuf, 80, L"Record: %d", current_record);
     conscr::writescol(x, y, gbuf, FOREGROUND_GRAY);
 
-    snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);
-    conscr::writescol(x,y+1,gbuf,FOREGROUND_GRAY);
+    snwprintf(gbuf, 80, L"Record: %d", current_record);
+    conscr::writescol(x, y+1, gbuf, FOREGROUND_GRAY);
 
-    if(infocursor == 0) conscr::putchcol(x-1,y+2,L'>',FOREGROUND_GRAY);
+    snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);
+    conscr::writescol(x,y+2,gbuf,FOREGROUND_GRAY);
+
+    if(infocursor == 0) conscr::putchcol(x-1,y+3,L'>',FOREGROUND_GRAY);
     if(currentrecord.variants[current_variant].islinked) {
         snwprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
-        conscr::writescol(x+1,y+2,gbuf,FOREGROUND_WHITE);
-    } else conscr::writescol(x+1,y+2, L"Not linked",FOREGROUND_INTENSITY);
+        conscr::writescol(x+1,y+3,gbuf,FOREGROUND_WHITE);
+    } else conscr::writescol(x+1,y+3, L"Not linked",FOREGROUND_INTENSITY);
 
     u32 totalsize = pcsx2calcsize(records, commands, oopslen, pal);
     u32 origsize = (pal ? stages[current_stage].buttondataendP : stages[current_stage].buttondataend) - (pal ? stages[current_stage].buttondatabaseP : stages[current_stage].buttondatabase) + 1;

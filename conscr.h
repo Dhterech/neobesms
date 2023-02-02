@@ -18,9 +18,9 @@ namespace conscr {
     bool hasinput();
     int query_decimal(const wchar_t *msg);
     int query_hex(const wchar_t *msg);
+    UINT64 query_hexU(const wchar_t *msg);
     int query_string(const wchar_t *msg, wchar_t *out, int maxchars);
     void flushinputs();
-
 };
 
 #endif // BES_CONSCR_H
