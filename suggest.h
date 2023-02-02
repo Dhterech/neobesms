@@ -63,7 +63,7 @@ struct e_suggestline_t {
 
     u32 coolmodethreshold;
 
-    wchar_t *localisations[7]; // 4 orign
+    wchar_t *localisations[7];
     u32 always_zero;
 
     bool containssubdot(u32 subdot);
@@ -73,7 +73,6 @@ struct e_suggestvariant_t {
     bool islinked = false;
     int linknum;
     std::vector<e_suggestline_t> lines;
-    //std::vector<e_suggestline_t_pal> linesP;
 };
 
 struct suggestvariant_t {

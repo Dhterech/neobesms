@@ -28,10 +28,7 @@ bool pcsx2opened() {
 
 static DWORD findprocessid(LPCWSTR name) {
     PROCESSENTRY32W pe;
-    HANDLE snapshot = CreateToolhelp32Snapshot(
-        TH32CS_SNAPPROCESS,
-        0
-    );
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if(INVALID_HANDLE_VALUE == snapshot) return 0;
 
     pe.dwSize = sizeof(pe);
@@ -45,7 +42,6 @@ static DWORD findprocessid(LPCWSTR name) {
         }
         success = Process32NextW(snapshot, &pe);
     } while (success);
-
     return 0;
 }
 

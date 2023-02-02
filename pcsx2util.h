@@ -11,8 +11,7 @@ u32 findhdbase(u32 resource_list_base);
 u32 findbdbase(u32 resource_list_base);
 int getnumhd(u32 hdbase);
 
-void pcsx2DwnlRecord(
-    u32 record_addr, e_suggestrecord_t &editor_record);
+void pcsx2DwnlRecord(u32 record_addr, e_suggestrecord_t &editor_record);
 
 int pcsx2ReadRecords(
     u32 stagecmd_start,
