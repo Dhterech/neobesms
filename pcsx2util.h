@@ -53,12 +53,6 @@ bool pcsx2upload(
     byte *oopsdat, int oopslen,
     u32 datastart, u32 dataend,
     u32 stagemodelistbase, bool isPAL);
-bool olmupload(
-    wchar_t *filename,
-    std::vector<e_suggestrecord_t> &records,
-    std::vector<commandbuffer_t> *commands,
-    byte *oopsdat, int oopslen,
-    u32 datastart, u32 dataend,
-    u32 stagemodelistbase, bool isPAL);
+bool olmupload(wchar_t *filename);
 
 #endif // BES_PCSX2UTIL_H

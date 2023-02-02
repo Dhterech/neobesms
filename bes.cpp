@@ -931,13 +931,13 @@ bool doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 01/02/2023",
+	L"NeoBesms 02/02/2023",
     (pal ? L"Current region: PAL" : L"Current region: NTSC"),
 	L"",
     L"[F01] Save Project",
     L"[F03] Load Project",
     L"",
-    L"[F05] Inject OLM",
+    L"[F05] Inject .OLM File",
     L"[F09] Download From PCSX2",
 	L"[F10] Toggle game region",
     L"",
@@ -985,7 +985,7 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
         if(l == 0) return;
         stageinfo_t si = getcurrentstageinfo();
 		
-        bool s = olmupload(filename, records, commands, oopsdat, oopslen, (pal ? si.buttondatabaseP : si.buttondatabase), (pal ? si.buttondataendP : si.buttondataend), (pal ? si.stagemodelistbaseP : si.stagemodelistbase), pal);
+        bool s = olmupload(filename);
         if(s) {snwprintf(gbuf, 80, L" Info: Injected %ls", filename); showerror(gbuf);}
         else snwprintf(gbuf, 80, L" Error: Failed to inject %ls", filename); showerror(gbuf);
         waitkey();
