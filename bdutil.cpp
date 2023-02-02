@@ -7,9 +7,7 @@ int getbdlen(byte *bd) {
         flag = *(u8*)(a + 1);
         a += 16;
         count += 16;
-        if(flag >= 0x7) {
-            return count;
-        }
+        if(flag >= 0x7) return count;
     };
 }
 

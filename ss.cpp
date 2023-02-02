@@ -61,30 +61,21 @@ void sound_t::load(const e_soundboard_t &sb, const e_sound_t &snd) {
     wfx.nChannels = 1;
     wfx.nSamplesPerSec = snd.frequency;
     wfx.wBitsPerSample = 16;
-    wfx.nBlockAlign =
-        (wfx.wBitsPerSample / 8) * wfx.nChannels;
-    wfx.nAvgBytesPerSec =
-        wfx.nBlockAlign * wfx.nSamplesPerSec;
+    wfx.nBlockAlign = (wfx.wBitsPerSample / 8) * wfx.nChannels;
+    wfx.nAvgBytesPerSec = wfx.nBlockAlign * wfx.nSamplesPerSec;
     wfx.wFormatTag = WAVE_FORMAT_PCM;
 
     DSBUFFERDESC desc;
     desc.dwSize = sizeof(DSBUFFERDESC);
     desc.dwBufferBytes = rawbuflen;
-    desc.dwFlags =
-        DSBCAPS_CTRLFREQUENCY |
-        DSBCAPS_CTRLVOLUME
-    ;
+    desc.dwFlags = DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME;
     desc.dwReserved = 0;
     desc.guid3DAlgorithm = DS3DALG_DEFAULT;
     desc.lpwfxFormat = &wfx;
 
     IDirectSoundBuffer *sndbuf;
 
-    dsnd->CreateSoundBuffer(
-        &desc,
-        &sndbuf,
-        NULL
-    );
+    dsnd->CreateSoundBuffer(&desc, &sndbuf, NULL);
 
     //TODO: Check Result
 
@@ -133,10 +124,9 @@ void soundenv_t::clear() {
 void soundenv_t::load(const e_soundboard_t &sb) {
     this->clear();
     int nsounds = sb.sounds.size();
-    int i;
     this->sounds.resize(nsounds);
 
-    for(i = 0; i < nsounds; i += 1) {
+    for(int i = 0; i < nsounds; i += 1) {
         this->sounds[i].load(sb, sb.sounds[i]);
     }
 
@@ -189,8 +179,7 @@ void loadticker() {
     wfx.nSamplesPerSec = 24000;
     wfx.wBitsPerSample = 16;
     wfx.nBlockAlign = (wfx.wBitsPerSample / 8) * wfx.nChannels;
-    wfx.nAvgBytesPerSec =
-        wfx.nBlockAlign * wfx.nSamplesPerSec;
+    wfx.nAvgBytesPerSec = wfx.nBlockAlign * wfx.nSamplesPerSec;
     wfx.wFormatTag = WAVE_FORMAT_PCM;
 
     DSBUFFERDESC desc;
@@ -198,9 +187,7 @@ void loadticker() {
     desc.guid3DAlgorithm = GUID_NULL;
     desc.dwReserved = 0;
     desc.dwSize = sizeof(DSBUFFERDESC);
-    desc.dwFlags =
-        DSBCAPS_CTRLFREQUENCY |
-        DSBCAPS_CTRLVOLUME
+    desc.dwFlags =DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME
     ;
     desc.lpwfxFormat = &wfx;
 
