@@ -2,20 +2,27 @@
 #define BES_STAGEINFO_H
 #include <array>
 #include "types.h"
-struct stageinfo_t {
+
+struct currentstage_t {
     const wchar_t *name;
     double bpm;
-    //std::array<u32, 4> recordlistbases;
     u32 stagemodelistbase;
     u32 keytablebase;
     u32 buttondatabase;
     u32 buttondataend;
-	
-	// PAL
-	u32 stagemodelistbaseP;
-	u32 keytablebaseP;
-    u32 buttondatabaseP;
-    u32 buttondataendP;
+};
+
+struct regioninfo_t {
+    u32 stagemodelistbase;
+    u32 keytablebase;
+    u32 buttondatabase;
+    u32 buttondataend;
+};
+
+struct stageinfo_t {
+    const wchar_t *name;
+    double bpm;
+    regioninfo_t regions[3];
 };
 
 extern stageinfo_t stages[8];

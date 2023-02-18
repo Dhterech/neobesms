@@ -4,7 +4,7 @@ NeoBESMS is a modified version of ptr2besms, a tool for modifying lines on PaRap
 
 ## Changes
 
-* PAL compatibility
+* PAL & NTSC-J compatibility (needs testing)
 * Functional .OLM file injection
 * Shift+F9 for manual PCSX2 base address
 * Shift+P to play without ticks
@@ -16,11 +16,12 @@ NeoBESMS is a modified version of ptr2besms, a tool for modifying lines on PaRap
 
 * Make improvements in some areas
 * Fix loading 64-bit PCSX2 base address manually
+* Check for any audio issues
 
 ## Notes
 
 * PAL needs linking of lines to effectively add something
-* NTSC project files doesn't work properly on PAL
+* Project files from one region cannot be loaded onto another (needs testing)
 * Expect some bugs for now as this project is very early.
 
 ## Credits
