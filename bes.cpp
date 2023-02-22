@@ -72,23 +72,23 @@ int lastsbload = -1;
 const wchar_t *regions[] = { L"NTSC", L"PAL", L"NTSC-J" };
 
 const wchar_t *difficulties[] = {
-    L"Orange Hat", // 0
-    L"Lowest", // 1 o hor
-    L"", // 2 o bad
-    L"", // 3 b hor
-    L"", // 4 b bad
-    L"", // 5 p hor
-    L"", // 6 p bad 
-    L"", // 7 yhor 
-    L"", // 8 ybad
-    L"Blue Hat", // 9
-    L"Pink Hat", // 10
-    L"Yellow Hat", // 11
-    L"", // 12 o
-    L"", // 13 b 
-    L"", // 14 p
-    L"", // 15 y
-    L"Highest", // 16
+    L"Orange Hat", 
+    L"Lowest",
+    L"Awful",
+    L"",
+    L"Awful", 
+    L"Bad", 
+    L"Bad +1", 
+    L"Bad +2", 
+    L"Bad +3", 
+    L"Blue Hat", 
+    L"Pink Hat", 
+    L"Yellow Hat", 
+    L"Yellow Hat +1",
+    L"Yellow Hat +2",
+    L"Yellow Hat +3",
+    L"",
+    L"Highest",
 };
 
 void loadsoundboard(int id) {
@@ -183,15 +183,15 @@ void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm,
     double nexttick = 0.0;
     double secondsperbeat = 60.0/bpm;
     double timebase = gettime();
+    double rtime;
     for(int i = 0; i < tokens.size(); i++) {
-        double rtime;
         do {
             rtime = gettime() - timebase;
             if(rtime > nexttick && tick) { playticker(); nexttick += secondsperbeat; }
             if(conscr::hasinput()) {
                 INPUT_RECORD ir;
                 conscr::read(ir);
-                if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return;
+                if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {env.sounds.clear(); lastsbload = -1; return;}
             }
         } while(rtime <= tokens[i].when);
         env.play(tokens[i].soundid);
@@ -223,13 +223,13 @@ int importFromEmulator() {
     showerror(L" Status: Reading current stage...");
 	
     pcsx2reader::read(CURRENT_STAGE[curReg], &current_stage, 1); current_stage--;
-    showerror(L" Status: Getting stage info & database...");
+    showerror(L" Status: Getting stage info & sound database...");
     getcurrentstageinfo();
     u32 hdlistbase = findhdbase(RESOURCE_LIST_BASE[curReg]);
     u32 bdlistbase = findbdbase(RESOURCE_LIST_BASE[curReg]);
     int numhd = getnumhd(hdlistbase);
 
-    showerror(L" Status: Reading game data...");
+    showerror(L" Status: Reading game lines...");
     records.clear();
     try{
         pcsx2GetRecFromModelist(currentstage.stagemodelistbase, records, pal);
@@ -309,8 +309,7 @@ u32 getcurrentsubdot() { return (cursorpos * 24) + precisioncursorpos; }
 int getcurrentowner() { return owners[cursorowner]; }
 
 void advancecursor(int n, int maxindex) {
-    cursorpos += n;
-    if(cursorpos > maxindex) cursorpos = maxindex;
+    if(cursorpos++ > maxindex) cursorpos = maxindex;
 }
 
 bool linesorter(e_suggestline_t &line1, e_suggestline_t &line2) {
@@ -345,7 +344,7 @@ void doleftexpand(u32 subdot, int owner) {
             if(!line.containssubdot(line.timestamp_start + line.buttons[i].timestamp)) {
                 line.buttons.erase(line.buttons.begin() + i);
             }
-            i-=1;
+            i--;
         }
 
     }
@@ -736,9 +735,8 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     else if(k == 'C') { docopybutton(getcurrentsubdot()); }
     else if(k == 'V') { dopastebutton(getcurrentsubdot()); }
     else if(k == 'P') {
-        e_suggestvariant_t &variant = getcurrentvariant();
         loadsoundboard(currentrecord.soundboardid-1);
-        playvariant(variant, soundenv, stages[current_stage].bpm, !shiftmod);
+        playvariant(getcurrentvariant(), soundenv, stages[current_stage].bpm, !shiftmod);
     }
     else if(k == VK_TAB) {
         infocursor++;
@@ -757,11 +755,14 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
             return;
         }
         showerror(L" Status: Uploading to PCSX2...");
-        pcsx2upload(records, commands, oopsdat, oopslen, currentstage.buttondatabase, currentstage.buttondataend, currentstage.stagemodelistbase, pal);
+        bool result = pcsx2upload(records, commands, oopsdat, oopslen, currentstage.buttondatabase, currentstage.buttondataend, currentstage.stagemodelistbase, pal, neosubtitles);
+        if(result) showerror(L" Info: Current lines are injected in PCSX2.");
+        else showerror(L" Error: There was an error injecting in PCSX2.");
+        waitkey();
     }
 }
 
-bool dosaveproject(wchar_t *name) {
+int dosaveproject(wchar_t *name) {
     HANDLE hfile = CreateFileW(
         LPCWSTR(name),
         GENERIC_WRITE,
@@ -772,11 +773,7 @@ bool dosaveproject(wchar_t *name) {
         NULL
     );
 
-    if(hfile == INVALID_HANDLE_VALUE) {
-        snwprintf(gbuf, 80, L"File cannot be saved in this location. Error: %d", GetLastError());
-        MessageBoxW(0,gbuf,0,0);
-        return false;
-    }
+    if(hfile == INVALID_HANDLE_VALUE) return GetLastError();
 
     DWORD written;
     #define WRITE(x) WriteFile(hfile, LPCVOID(&(x)), sizeof(x), &written, NULL)
@@ -786,8 +783,7 @@ bool dosaveproject(wchar_t *name) {
     tmpu32 = u32(current_stage); WRITE(tmpu32);
     for(int i = 0; i < 9; i++) {
         std::vector<commandbuffer_t> &buffer = commands[i];
-        tmpu32 = u32(buffer.size());
-        WRITE(tmpu32);
+        tmpu32 = u32(buffer.size()); WRITE(tmpu32);
         for(int k = 0; k < buffer.size(); k++) WRITE(buffer[k].data);
     }
     tmpu32 = records.size(); WRITE(tmpu32);
@@ -800,7 +796,6 @@ bool dosaveproject(wchar_t *name) {
         for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
             tmpi32 = variant.islinked ? i32(variant.linknum) : -1; WRITE(tmpi32);
-
             tmpu32 = variant.lines.size(); WRITE(tmpu32);
             for(int m = 0; m < variant.lines.size(); m++) {
                 e_suggestline_t &line = variant.lines[m];
@@ -815,14 +810,11 @@ bool dosaveproject(wchar_t *name) {
                 WRITE(line.unk1);
                 WRITE(line.unk2);
 
-                tmpu32 = line.buttons.size();
-                WRITE(tmpu32);
-                for(int n = 0; n < line.buttons.size(); n++) {
-                    suggestbutton_t &button = line.buttons[n];
-                    WRITE(button);
-                }
+                tmpu32 = line.buttons.size(); WRITE(tmpu32);
+                for(int n = 0; n < line.buttons.size(); n++) WRITE(line.buttons[n]);
             }
         }
+        return 0;
     }
 
     tmpu32 = soundboards.size(); WRITE(tmpu32);
@@ -838,22 +830,17 @@ bool dosaveproject(wchar_t *name) {
         );
 
         tmpu32 = sb.keys.size(); WRITE(tmpu32);
-        for(int k = 0; k < sb.keys.size(); k++) {
-            key_t &key = sb.keys[k];
-            WRITE(key);
-        }
+        for(int k = 0; k < sb.keys.size(); k++) WRITE(sb.keys[k]);
         WRITE(sb.prog);
         tmpu32 = sb.sounds.size(); WRITE(tmpu32);
-        for(int k = 0; k < sb.sounds.size(); k++) {
-            WRITE(sb.sounds[k]);
-        }
+        for(int k = 0; k < sb.sounds.size(); k++) WRITE(sb.sounds[k]);
     }
     #undef WRITE
     CloseHandle(hfile);
     return true;
 }
 
-bool doloadproject(wchar_t *name) {
+int doloadproject(wchar_t *name) {
     HANDLE hfile = CreateFileW(
         LPCWSTR(name),
         GENERIC_READ,
@@ -864,11 +851,7 @@ bool doloadproject(wchar_t *name) {
         NULL
     );
 
-    if(hfile == INVALID_HANDLE_VALUE) {
-        snwprintf(gbuf, 80, L"File cannot be found/accessed. Error:%d", GetLastError());
-        MessageBoxW(0,gbuf,0,0);
-        return false;
-    }
+    if(hfile == INVALID_HANDLE_VALUE) return GetLastError();
 
     DWORD readin;
     records.clear();
@@ -920,6 +903,8 @@ bool doloadproject(wchar_t *name) {
                 }
             }
         }
+
+        return 0;
     }
 
     READ(tmpu32); soundboards.resize(tmpu32);
@@ -946,7 +931,7 @@ bool doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 03/02/2023",
+	L"NeoBesms 19/02/2023",
     L"",
 	L"",
     L"[F01] Save Project",
@@ -963,7 +948,7 @@ void drawoptions() {
     conscr::clearchars(L' ');
     conscr::clearcol(FOREGROUND_GRAY);
     optionlines[1] = regions[curReg];
-    optionlines[11] = ((records.size() == 0) ? L"" : L"[ESC] Return to editor");
+    optionlines[10] = ((records.size() == 0) ? L"" : L"[ESC] Return to editor");
 	int optlines = (sizeof(optionlines) / sizeof(optionlines[0]));
     for(int i = 0; i < optlines; i++) conscr::writes(1,1+i, optionlines[i]);
     conscr::refresh();
@@ -981,21 +966,23 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
     }
     else if(k == VK_F1) {
         if(conscr::query_string(L" Input: Save as: ", filename, MAX_PATH) == 0) return;
-        if(dosaveproject(filename)) { snwprintf(gbuf, 80, L"Saved as %ls", filename); showerror(gbuf); }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); }
+        int result = dosaveproject(filename);
+        if(result == 0) { snwprintf(gbuf, 80, L"Saved as %ls", filename); showerror(gbuf); }
+		else { snwprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %d", filename, result); showerror(gbuf); }
         waitkey();
     }
     else if(k == VK_F3) {
-        if(conscr::query_string(L"Load Path: ", filename, MAX_PATH) == 0) return;
-        if(doloadproject(filename)) { menu_options = false; }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls", filename); showerror(gbuf); waitkey(); }
+        if(conscr::query_string(L" Input: Load Path: ", filename, MAX_PATH) == 0) return;
+        int result = doloadproject(filename);
+        if(result == 0) { menu_options = false; }
+		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls, Error: %d. Please check if file exists", filename, result); showerror(gbuf); waitkey(); }
     }
     //else if(k == VK_F6) { neosubtitles = !neosubtitles; }
     else if(k == VK_F5) {
         if(conscr::query_string(L" Input: OLM File Path: ", filename, MAX_PATH) == 0) return;
         getcurrentstageinfo();
-        if(olmupload(filename)) {snwprintf(gbuf, 80, L" Info: Injected %ls", filename); showerror(gbuf);}
-        else snwprintf(gbuf, 80, L" Error: Failed to inject %ls", filename); showerror(gbuf);
+        if(olmupload(filename)) {snwprintf(gbuf, 80, L" Info: Uploaded OLM file: %ls", filename); showerror(gbuf);}
+        else snwprintf(gbuf, 80, L" Error: Failed to upload OLM file: %ls", filename); showerror(gbuf);
         waitkey();
     }
 	else if(k == VK_F10) {
@@ -1005,7 +992,7 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
         else {subcount = 7; pal = true;}
     }
     else if(k == VK_ESCAPE) {
-	    if(records.size() == 0) {showerror(L" Error: No data loaded. Please load something from the menu."); waitkey();}
+	    if(records.size() == 0) {showerror(L" Error: There is no data to edit. Please load something from the menu."); waitkey();}
 		else { menu_options = false; }
     }
 }

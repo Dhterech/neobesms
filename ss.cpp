@@ -3,11 +3,11 @@
 #include "adpcm.h"
 #include "bdutil.h"
 
-LPDIRECTSOUND8 dsnd;
-LPDIRECTSOUNDBUFFER8 ticksnd = NULL;
+LPDIRECTSOUND dsnd;
+LPDIRECTSOUNDBUFFER ticksnd = NULL;
 
 void initsound(HWND hwnd) {
-    DirectSoundCreate8(NULL, &dsnd, NULL);
+    DirectSoundCreate(NULL, &dsnd, NULL);
     dsnd->SetCooperativeLevel(hwnd, DSSCL_PRIORITY);
     //dsnd->SetSpeakerConfig(DSSPEAKER_STEREO);
 }
@@ -80,7 +80,7 @@ void sound_t::load(const e_soundboard_t &sb, const e_sound_t &snd) {
     //TODO: Check Result
 
     sndbuf->QueryInterface(
-        IID_IDirectSoundBuffer8,
+        IID_IDirectSoundBuffer,
         (void**)(&this->sndbuf)
     );
 
@@ -187,8 +187,7 @@ void loadticker() {
     desc.guid3DAlgorithm = GUID_NULL;
     desc.dwReserved = 0;
     desc.dwSize = sizeof(DSBUFFERDESC);
-    desc.dwFlags =DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME
-    ;
+    desc.dwFlags =DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME;
     desc.lpwfxFormat = &wfx;
 
     IDirectSoundBuffer *tmp;
@@ -200,7 +199,7 @@ void loadticker() {
     );
 
     tmp->QueryInterface(
-        IID_IDirectSoundBuffer8,
+        IID_IDirectSoundBuffer,
         (void**)&ticksnd
     );
 

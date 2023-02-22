@@ -63,7 +63,7 @@ struct e_suggestline_t {
 
     u32 coolmodethreshold;
 
-    wchar_t *localisations[7];
+    u32 localisations[7];
     u32 always_zero;
 
     bool containssubdot(u32 subdot);

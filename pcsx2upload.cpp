@@ -54,27 +54,18 @@ u32 applymetafixup(u32 start, u32 fixup, bool skip) {
     }
 }
 
-void getmetabases(u32 stagemodelistbase, u32 *mb) {
-    scenemode_t modes[9];
-    pcsx2reader::read(stagemodelistbase, modes, sizeof(modes));
-    for(int i = 0; i < 9; i += 1) {
-        pcsx2reader::read(modes[i].ptr_scenecommands, mb + i, 4);
-    }
-    return;
-}
-
 bool pcsx2upload(
     std::vector<e_suggestrecord_t> &records,
     std::vector<commandbuffer_t> *buffers,
     byte *oopsdat, int oopslen,
     u32 datastart, u32 dataend,
-    u32 stagemodelistbase, bool isPAL) {
+    u32 stagemodelistbase, bool isPAL, bool kSubs) {
     u32 a = datastart;
     u32 ptr_oops_parap;
     u32 ptr_oops_teach;
     u32 mb[9];
     scenemode_t modes[9];
-    //getmetabases(stagemodelistbase, mb);
+
     u32 count = dataend - datastart + 1;
     if(pcsx2calcsize(records, buffers, oopslen, isPAL) > count) return false;
     DOWNLOAD_SIZE(stagemodelistbase, modes[0], sizeof(modes));
@@ -119,13 +110,10 @@ bool pcsx2upload(
                 if(!isPAL) {
                     ps2line.buttoncount = line.buttons.size();
                     ps2line.ptr_buttons = buttonbase;
-                    for(int n = 0; n < line.buttons.size(); n += 1) {
-                        suggestbutton_t &button = line.buttons[n];
-                        UPLOAD(buttonbase, button);
-                    }
+                    for(int n = 0; n < line.buttons.size(); n += 1) {UPLOAD(buttonbase, line.buttons[n]);}
                     ps2line.always_zero = 0;
                     ps2line.coolmodethreshold = line.coolmodethreshold;
-                    for(int t = 0; t < 4; t += 1) {ps2line.localisations[t] = u32(~0);}
+                    for(int t = 0; t < 4; t += 1) {ps2line.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);}
                     ps2line.owner = line.owner;
                     ps2line.timestamp_start = line.timestamp_start;
                     ps2line.timestamp_end = line.timestamp_end;
@@ -135,13 +123,10 @@ bool pcsx2upload(
                 } else {
                     ps2lineP.buttoncount = line.buttons.size();
                     ps2lineP.ptr_buttons = buttonbase;
-                    for(int n = 0; n < line.buttons.size(); n += 1) {
-                        suggestbutton_t &button = line.buttons[n];
-                        UPLOAD(buttonbase, button);
-                    }
+                    for(int n = 0; n < line.buttons.size(); n += 1) {UPLOAD(buttonbase, line.buttons[n]);}
                     ps2lineP.always_zero = 0;
                     ps2lineP.coolmodethreshold = line.coolmodethreshold;
-                    for(int t = 0; t < 7; t += 1) {ps2lineP.localisations[t] = u32(~0);}
+                    for(int t = 0; t < 7; t += 1) {ps2lineP.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);} // u32(~0)
                     ps2lineP.owner = line.owner;
                     ps2lineP.timestamp_start = line.timestamp_start;
                     ps2lineP.timestamp_end = line.timestamp_end;
@@ -151,7 +136,6 @@ bool pcsx2upload(
                 }
             }
             a = linebase; /* linebase is actually after all lines */
-
         }
         for(int k = 0; k < 17; k += 1) {
             e_suggestvariant_t &variant = record.variants[k];
@@ -183,29 +167,6 @@ bool pcsx2upload(
 #undef DOWNLOAD_SIZE
 
 #define OLM_LINK_ADDRESS 0x1CA0000
-#define UPLOAD_SIZE(y,x,s) SetFilePointer(hfile, y - OLM_LINK_ADDRESS, NULL, FILE_BEGIN); WriteFile(hfile, LPCVOID(&(x)), s, &written, NULL)
-#define DOWNLOAD_SIZE(y,x,s) SetFilePointer(hfile, y - OLM_LINK_ADDRESS, NULL, FILE_BEGIN); ReadFile(hfile, LPVOID(&(x)), s, &written, NULL)
-
-u32 olm_applymetafixup(HANDLE hfile, u32 start, u32 fixup, bool skip) {
-    u32 caddr = start;
-    u32 ptrinmem = 0;
-    u32 oldaddr = 0;
-    DWORD written;
-
-    for(;;) {
-        SetFilePointer(hfile, caddr - OLM_LINK_ADDRESS, NULL, FILE_BEGIN);
-        ReadFile(hfile, LPVOID(&ptrinmem), 4, &written, NULL);
-
-        if((ptrinmem & 0x1000000) == 0) {caddr += 4; continue;}
-
-        if(oldaddr == 0) {oldaddr = ptrinmem;}
-
-        if(ptrinmem != oldaddr) {return caddr;}
-
-        if(!skip) {UPLOAD_NOMOVE(caddr, fixup);}
-        caddr += 4;
-    }
-}
 
 bool olmupload(wchar_t *filename) {
     HANDLE hfile = CreateFileW(

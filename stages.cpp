@@ -1,14 +1,14 @@
 #include "stageinfo.h"
 
-// 0 USA, 1 PAL, 2 JP
+// 0 USA, 1 PAL
 
 stageinfo_t stages[8] = {
     {
         L"Toasty Buns",
         108.0,
         {
-            {0x01D2A848, 0x01CD3968, 0x01CD3A88, 0x01D29B18 + 0xD30 - 1,}, // NTSC
-            {0x01D31988, 0x01CD4908, 0x01CD4A28, 0x01D30C58 + 0xD30 - 1,}, // PAL
+            {0x01D2A848, 0x01CD3968, 0x01CD3A88, 0x01D29B18 + 0xD30 - 1,},
+            {0x01D31988, 0x01CD4908, 0x01CD4A28, 0x01D30C58 + 0xD30 - 1,},
         }
     },
     {

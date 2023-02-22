@@ -196,14 +196,14 @@ void ps2LineToEditor(const suggestline_t &ps2, const suggestline_t_pal &ps2p, e_
     }
 
     editor.coolmodethreshold = (isPAL ? ps2p.coolmodethreshold : ps2.coolmodethreshold);
-    editor.localisations[0] = nullptr;
-    editor.localisations[1] = nullptr;
-    editor.localisations[2] = nullptr;
-    editor.localisations[3] = nullptr;
+    editor.localisations[0] = (isPAL ? ps2p.localisations[0] : ps2.localisations[0]);
+    editor.localisations[1] = (isPAL ? ps2p.localisations[1] : ps2.localisations[1]);
+    editor.localisations[2] = (isPAL ? ps2p.localisations[2] : ps2.localisations[2]);
+    editor.localisations[3] = (isPAL ? ps2p.localisations[3] : ps2.localisations[3]);
     if(isPAL) {
-        editor.localisations[4] = nullptr;
-        editor.localisations[5] = nullptr;
-        editor.localisations[6] = nullptr;
+        editor.localisations[4] = (isPAL ? ps2p.localisations[4] : ps2.localisations[4]);
+        editor.localisations[5] = (isPAL ? ps2p.localisations[5] : ps2.localisations[5]);
+        editor.localisations[6] = (isPAL ? ps2p.localisations[6] : ps2.localisations[6]);
     }
     editor.timestamp_start = (isPAL ? ps2p.timestamp_start : ps2.timestamp_start);
     editor.timestamp_end = (isPAL ? ps2p.timestamp_end : ps2.timestamp_end);

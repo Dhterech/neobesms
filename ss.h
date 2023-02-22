@@ -7,8 +7,8 @@
 #include <array>
 #include <dsound.h>
 
-extern LPDIRECTSOUND8 dsnd;
-extern LPDIRECTSOUNDBUFFER8 ticksnd;
+extern LPDIRECTSOUND dsnd;
+extern LPDIRECTSOUNDBUFFER ticksnd;
 
 struct e_sound_t {
     u32 bdoffset;
