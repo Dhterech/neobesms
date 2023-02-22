@@ -931,13 +931,13 @@ int doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 19/02/2023",
+	L"NeoBesms 21/02/2023",
     L"",
 	L"",
     L"[F01] Save Project",
     L"[F03] Load Project",
     L"",
-    L"[F05] Inject .OLM File",
+    L"[F05] Upload .OLM File",
     L"[F09] Download From PCSX2",
 	L"[F10] Toggle game region",
     L"",
