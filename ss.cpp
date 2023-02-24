@@ -13,18 +13,15 @@ void initsound(HWND hwnd) {
 }
 
 void playticker() {
-    if(ticksnd != NULL) {
-        ticksnd->Stop();
-        ticksnd->SetCurrentPosition(0);
-        ticksnd->Play(0,0,0);
-    }
+    if(ticksnd == NULL) return;
+	ticksnd->Stop();
+	ticksnd->SetCurrentPosition(0);
+	ticksnd->Play(0,0,0);
 }
 
 void e_soundboard_t::clear() {
     this->sounds.clear();
-    if(this->bd.bytes != nullptr) {
-        free(this->bd.bytes);
-    }
+    if(this->bd.bytes != nullptr) free(this->bd.bytes);
     this->bd.bytes = nullptr;
 }
 
@@ -33,9 +30,7 @@ e_soundboard_t::~e_soundboard_t() {
 }
 
 void sound_t::clear() {
-    if(this->sndbuf != NULL) {
-        this->sndbuf->Release();
-    }
+    if(this->sndbuf != NULL) this->sndbuf->Release();
     this->sndbuf = NULL;
 }
 
@@ -51,7 +46,7 @@ void sound_t::load(const e_soundboard_t &sb, const e_sound_t &snd) {
     i16 *rawbuf = (i16*)malloc(rawbuflen);
 
     int i = 0;
-    while( i < nsamples ) {
+    while(i < nsamples) {
         decode_psx(bd, rawbuf + i, 1, i, 28);
         i += 28;
     }
@@ -79,34 +74,22 @@ void sound_t::load(const e_soundboard_t &sb, const e_sound_t &snd) {
 
     //TODO: Check Result
 
-    sndbuf->QueryInterface(
-        IID_IDirectSoundBuffer,
-        (void**)(&this->sndbuf)
-    );
+    sndbuf->QueryInterface(IID_IDirectSoundBuffer, (void**)(&this->sndbuf));
 
     LPVOID audbuf1;
     DWORD audbuf1len;
     LPVOID audbuf2;
     DWORD audbuf2len;
-    this->sndbuf->Lock(
-        0, rawbuflen,
-        &audbuf1, &audbuf1len,
-        &audbuf2, &audbuf2len,
-        0
-    );
+    this->sndbuf->Lock(0, rawbuflen, &audbuf1, &audbuf1len, &audbuf2, &audbuf2len, 0);
 
     memcpy(audbuf1, rawbuf, rawbuflen);
-    this->sndbuf->Unlock(
-        audbuf1, audbuf1len,
-        audbuf2, audbuf2len
-    );
+    this->sndbuf->Unlock(audbuf1, audbuf1len, audbuf2, audbuf2len);
 
     this->sndbuf->SetFrequency(snd.frequency);
     this->sndbuf->SetVolume(10000);
 
     sndbuf->Release();
     free(rawbuf);
-
 }
 
 sound_t::~sound_t() {
@@ -116,9 +99,7 @@ sound_t::~sound_t() {
 void soundenv_t::clear() {
     this->sounds.clear();
     this->keys.clear();
-    for(u16 &key : lastkey) {
-        key = ~0;
-    }
+    for(u16 &key : lastkey) {key = ~0;}
 }
 
 void soundenv_t::load(const e_soundboard_t &sb) {
@@ -126,9 +107,7 @@ void soundenv_t::load(const e_soundboard_t &sb) {
     int nsounds = sb.sounds.size();
     this->sounds.resize(nsounds);
 
-    for(int i = 0; i < nsounds; i += 1) {
-        this->sounds[i].load(sb, sb.sounds[i]);
-    }
+    for(int i = 0; i < nsounds; i += 1) {this->sounds[i].load(sb, sb.sounds[i]);}
 
     this->keys = sb.keys;
     this->prog = sb.prog;
@@ -143,10 +122,7 @@ void soundenv_t::play(int keyid) {
     u16 lastkey = this->lastkey[prog];
     u16 soundid = this->prog[prog][key];
 
-    if(lastkey != u16(~0)) {
-        this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();
-    }
-
+    if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
     this->lastkey[prog] = key;
 
     this->sounds[soundid].sndbuf->SetCurrentPosition(0);
@@ -166,10 +142,7 @@ void loadticker() {
     );
     LARGE_INTEGER len;
 
-    if(tickfile == INVALID_HANDLE_VALUE) {
-        ticksnd = NULL;
-        return;
-    }
+    if(tickfile == INVALID_HANDLE_VALUE) {ticksnd = NULL; return;}
 
     GetFileSizeEx(tickfile, &len);
 
@@ -191,45 +164,20 @@ void loadticker() {
     desc.lpwfxFormat = &wfx;
 
     IDirectSoundBuffer *tmp;
-
-    dsnd->CreateSoundBuffer(
-        &desc,
-        &tmp,
-        NULL
-    );
-
-    tmp->QueryInterface(
-        IID_IDirectSoundBuffer,
-        (void**)&ticksnd
-    );
+    dsnd->CreateSoundBuffer(&desc, &tmp, NULL);
+    tmp->QueryInterface(IID_IDirectSoundBuffer, (void**)&ticksnd);
 
     LPVOID audbuf1; DWORD audbuf1len;
     LPVOID audbuf2; DWORD audbuf2len;
-    ticksnd->Lock(
-        0,len.LowPart,
-        &audbuf1, &audbuf1len,
-        &audbuf2, &audbuf2len,
-        0
-    );
+    ticksnd->Lock(0, len.LowPart, &audbuf1, &audbuf1len, &audbuf2, &audbuf2len, 0);
 
     DWORD readin;
-    ReadFile(
-        tickfile,
-        audbuf1,
-        len.LowPart,
-        &readin,
-        NULL
-    );
+    ReadFile(tickfile, audbuf1, len.LowPart, &readin, NULL);
 
-    ticksnd->Unlock(
-        audbuf1, audbuf1len,
-        audbuf2, audbuf2len
-    );
-
+    ticksnd->Unlock(audbuf1, audbuf1len, audbuf2, audbuf2len);
     ticksnd->SetFrequency(24000);
     ticksnd->SetVolume(10000);
 
     tmp->Release();
-
     return;
 }

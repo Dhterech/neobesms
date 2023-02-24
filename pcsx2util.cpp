@@ -28,7 +28,6 @@ int getnumhd(u32 hdbase) {
         caddr += 4;
 
         pcsx2reader::read(raddr, &sig, 4);
-
         if(sig == HD_SIGNATURE) {count += 1;}
         else return count;
     }
@@ -176,7 +175,6 @@ void pcsx2GetSoundboards(u32 hdlistbase, u32 bdlistbase, u32 count, std::vector<
     for(int i = 0; i < count; i += 1) {
         pcsx2reader::read(hdlistbase + (i * 4), &hdbase, 4);
         pcsx2reader::read(bdlistbase + (i * 4), &bdbase, 4);
-
         pcsx2downloadsoundboard(hdbase, bdbase, 0,0, sblist[i]);
     }
 }
@@ -188,7 +186,6 @@ void ps2LineToEditor(const suggestline_t &ps2, const suggestline_t_pal &ps2p, e_
     editor.buttons.clear();
     editor.buttons.resize(buttoncount);
 
-
     u32 ptrbuttons = (isPAL ? ps2p.ptr_buttons : ps2.ptr_buttons);
     for(int i = 0; i < buttoncount; i += 1) {
         int loc = ptrbuttons + (sizeof(suggestbutton_t) * i);
@@ -196,15 +193,7 @@ void ps2LineToEditor(const suggestline_t &ps2, const suggestline_t_pal &ps2p, e_
     }
 
     editor.coolmodethreshold = (isPAL ? ps2p.coolmodethreshold : ps2.coolmodethreshold);
-    editor.localisations[0] = (isPAL ? ps2p.localisations[0] : ps2.localisations[0]);
-    editor.localisations[1] = (isPAL ? ps2p.localisations[1] : ps2.localisations[1]);
-    editor.localisations[2] = (isPAL ? ps2p.localisations[2] : ps2.localisations[2]);
-    editor.localisations[3] = (isPAL ? ps2p.localisations[3] : ps2.localisations[3]);
-    if(isPAL) {
-        editor.localisations[4] = (isPAL ? ps2p.localisations[4] : ps2.localisations[4]);
-        editor.localisations[5] = (isPAL ? ps2p.localisations[5] : ps2.localisations[5]);
-        editor.localisations[6] = (isPAL ? ps2p.localisations[6] : ps2.localisations[6]);
-    }
+    for(int s = 0; s < (isPAL ? 7 : 4); s++) {editor.localisations[s] = (isPAL ? ps2p.localisations[s] : ps2.localisations[s]);}
     editor.timestamp_start = (isPAL ? ps2p.timestamp_start : ps2.timestamp_start);
     editor.timestamp_end = (isPAL ? ps2p.timestamp_end : ps2.timestamp_end);
     editor.always_zero = 0;
