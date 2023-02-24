@@ -929,7 +929,7 @@ int doloadproject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 21/02/2023",
+	L"NeoBesms 24/02/2023",
     L"",
 	L"",
     L"[F01] Save Project",
