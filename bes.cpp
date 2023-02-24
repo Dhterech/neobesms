@@ -814,7 +814,6 @@ int dosaveproject(wchar_t *name) {
                 for(int n = 0; n < line.buttons.size(); n++) WRITE(line.buttons[n]);
             }
         }
-        return 0;
     }
 
     tmpu32 = soundboards.size(); WRITE(tmpu32);
@@ -837,7 +836,7 @@ int dosaveproject(wchar_t *name) {
     }
     #undef WRITE
     CloseHandle(hfile);
-    return true;
+    return 0;
 }
 
 int doloadproject(wchar_t *name) {
