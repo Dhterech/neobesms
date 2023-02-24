@@ -903,8 +903,6 @@ int doloadproject(wchar_t *name) {
                 }
             }
         }
-
-        return 0;
     }
 
     READ(tmpu32); soundboards.resize(tmpu32);
@@ -925,7 +923,7 @@ int doloadproject(wchar_t *name) {
     }
     #undef READ
     CloseHandle(hfile);
-    return true;
+    return 0;
 }
 
 // menu
