@@ -22,6 +22,7 @@ NeoBESMS is a modified version of ptr2besms, a tool for modifying lines on PaRap
 ## Notes
 
 * Expect some bugs for now as this project is very early.
+* You will need a 64 bit build to load 64 bit PCSX2 (by using SHIFT+F9 and entering eemem address)
 
 ## Credits
 
