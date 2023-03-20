@@ -5,9 +5,9 @@
 namespace pcsx2reader {
 
 static HANDLE ps2_handle = NULL;
-int PCSX2_BASE = 0x20000000;
+UINT64 PCSX2_BASE = 0x20000000;
 
-void setBaseAddr(int newBase) {
+void setBaseAddr(UINT64 newBase) {
     if(newBase > 0) PCSX2_BASE = newBase;
 }
 

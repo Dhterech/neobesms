@@ -5,7 +5,7 @@
 
 namespace pcsx2reader {
 
-void setBaseAddr(int addr);
+void setBaseAddr(uint64_t addr);
 bool read(u32 addr, void *out, u32 size);
 bool write(u32 addr, void *out, u32 size);
 bool pcsx2opened();

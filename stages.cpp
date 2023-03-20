@@ -7,8 +7,8 @@ stageinfo_t stages[8] = {
         L"Toasty Buns",
         108.0,
         {
-            {0x01D2A848, 0x01CD3968, 0x01CD3A88, 0x01D29B18 + 0xD30 - 1,},
-            {0x01D31988, 0x01CD4908, 0x01CD4A28, 0x01D30C58 + 0xD30 - 1,},
+            {0x01D2A848, 0x01CD3968, 0x01CD3A88, 0x01D29B18 + 0xD30 - 1},
+            {0x01D31988, 0x01CD4908, 0x01CD4A28, 0x01D30C58 + 0xD30 - 1},
         }
     },
     {
@@ -63,12 +63,8 @@ stageinfo_t stages[8] = {
         L"Always LOVE",
         99.0,
         {
-            {0x01D82460, 0x01D1AB20, 0x01D1ACD0, 0x01D814D0 + 0xF90 -1},
+            {0x01D82460, 0x01D1AB20, 0x01D1ACD0, 0x01D814D0 + 0xF90 - 1},
             {0x01D86698, 0x01D1ACC8, 0x01D1AE78, 0x01D85708 + 0xF90 - 1}
         }
     }
 };
-
-//0x01CD3A88
-
-
