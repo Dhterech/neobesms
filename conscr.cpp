@@ -117,7 +117,7 @@ static int mygetsA(char *buf, int n) {
     return c;
 }
 
-static int mygetsW(wchar_t *buf, int n) { // this
+static int mygetsW(wchar_t *buf, int n) {
     wchar_t *cbuf = buf;
     int c = 0;
     while(c < n) {
@@ -185,7 +185,7 @@ int query_string(const wchar_t *msg, wchar_t *out, int maxchars) {
     if(out[slen-1] == L'\n') out[slen-1] = wchar_t(0);
 
     SetConsoleCursorPosition(stdOutH, {0,0});
-    return lstrlenW(out); // ?
+    return lstrlenW(out);
 }
 
 };

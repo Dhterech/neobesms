@@ -2,7 +2,7 @@
 #include "suggest.h"
 #include "pcsx2reader.h"
 #include "ss.h"
-#include "adpcm.h"
+//#include "adpcm.h"
 #include "pcsx2util.h"
 #include "stageinfo.h"
 #include <stdlib.h>
@@ -11,8 +11,6 @@
 #include <array>
 
 #include "config.h"
-
-#include <dsound.h>
 
 #define snwprintf swprintf
 
@@ -44,8 +42,8 @@ int paramoverride = 0;
 int precisioncursor = 0;
 int infocursor = 0;
 
-int owners[4] = {0x2, 0x4};
-int numowners = 2;
+int owners[4] = {0x2, 0x4, 0x8};
+int numowners = 3;
 
 int current_stage = 0;
 
@@ -171,7 +169,7 @@ void playVariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm,
     double nexttick = 0.0;
 
     conscr::writes(0,0,L" Press any key to stop playback"); conscr::refresh();
-    loadSoundboard(records[current_record].soundboardid - 1);
+    loadSoundboard(currentrecord.soundboardid - 1);
 
     double secondsperbeat = 60.0/bpm;
     double timebase = getTime();
@@ -194,11 +192,11 @@ void importStageInfo() {
     currentstage.bpm = stages[current_stage].bpm;
     currentstage.stagemodelistbase = stages[current_stage].regions[tmpReg].stagemodelistbase;
     currentstage.keytablebase = stages[current_stage].regions[tmpReg].keytablebase;
-    currentstage.buttondatabase = currentstage.keytablebase + 0x11F;
+    currentstage.buttondatabase = currentstage.keytablebase + 0x120;
     currentstage.buttondataend = currentstage.stagemodelistbase - 1;
 }
 
-void waitkey() {
+void waitKey() {
     conscr::flushinputs();
     for(;;) {
         INPUT_RECORD ir;
@@ -215,7 +213,7 @@ void logInfo(const wchar_t *msg) {
 
 void logWarn(const wchar_t *msg) {
     logInfo(msg);
-    waitkey();
+    waitKey();
 }
 
 int importFromEmulator() {
@@ -507,6 +505,11 @@ void copyButton(u32 subdot) {
     if(getButFromSubdot(getCurVariant(), getCurOwner(), subdot, button)) button_clipboard = button;
 }
 
+void cutButton(u32 subdot) {
+    copyButton(subdot);
+    deleteButton(subdot, getCurOwner());
+}
+
 void pasteButton(u32 subdot) {
     suggestbutton_t *pbutton;
     deleteButton(subdot, getCurOwner());
@@ -654,12 +657,10 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     else if(k == '6') { dcb(6); }
     else if(k == '7') { dcb(0); }
     else if(k == '0') { deleteButton(getCurSubdot(), getCurOwner()); }
+    else if(k == 'X') { cutButton(getCurSubdot()); }
     else if(k == 'C') { copyButton(getCurSubdot()); }
     else if(k == 'V') { pasteButton(getCurSubdot()); }
-    else if(k == 'P') {
-        loadSoundboard(currentrecord.soundboardid - 1);
-        playVariant(getCurVariant(), soundenv, stages[current_stage].bpm, !shiftmod);
-    }
+    else if(k == 'P') { playVariant(getCurVariant(), soundenv, stages[current_stage].bpm, !shiftmod); }
     else if(k == VK_TAB) {
         infocursor++;
         if(infocursor > 1) infocursor = 0;
@@ -838,7 +839,7 @@ int loadProject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 24/03/2023",
+	L"NeoBesms 27/03/2023",
     L"",
 	L"",
     L"[F01] Save Project",
@@ -874,7 +875,7 @@ void onOptionsKey(int k, wchar_t uc, bool shiftmod) {
     else if(k == VK_F1) {
         if(conscr::query_string(L" Input: Save as: ", filename, MAX_PATH) == 0) return;
         int result = saveProject(filename);
-        if(result == 0) { snwprintf(gbuf, 80, L"Saved as %ls", filename); logInfo(gbuf); }
+        if(result == 0) { snwprintf(gbuf, 80, L"Saved as %ls", filename); logWarn(gbuf); }
 		else { snwprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %d", filename, result); logWarn(gbuf); }
     }
     else if(k == VK_F3) {
@@ -945,7 +946,7 @@ const wchar_t *ownernames[] = {
     L"???",
     L"Teacher",
     L"PaRappa",
-    L"Boxxy"
+    L"SFX"
 };
 
 void drawownername(int x, int y, int ownerid) {
@@ -960,21 +961,18 @@ void drawownername(int x, int y, int ownerid) {
 }
 
 void drawrecord(e_suggestrecord_t &record, e_suggestvariant_t &variant) {
-    drawownername(1,2,owners[0]);
-    drawlinemarkers(10,1,owners[0],variant, record.lengthinsubdots);
-    drawvariant_base(10, 2, owners[0], variant, record.lengthinsubdots);
-    drawvariant(10,2,owners[0], variant, record.lengthinsubdots);
+    for(int i = 0; i < numowners; i++) {
+        drawownername(1, 2 + (i*3),owners[i]);
+        drawlinemarkers(10, 1 + (i*3), owners[i],variant, record.lengthinsubdots);
+        drawvariant_base(10, 2 + (i*3), owners[i], variant, record.lengthinsubdots);
+        drawvariant(10, 2 + (i*3), owners[i], variant, record.lengthinsubdots);
+    }
 
-    drawownername(1,5,owners[1]);
-    drawlinemarkers(10,4,owners[1],variant,record.lengthinsubdots);
-    drawvariant_base(10, 5, owners[1], variant, record.lengthinsubdots);
-    drawvariant(10,5,owners[1], variant, record.lengthinsubdots);
-
-    drawprecision_base(14, 8, getCurOwner(), variant);
-    drawprecision_buttons(14,8, getCurOwner(), variant);
+    drawprecision_base(14, 11, getCurOwner(), variant);
+    drawprecision_buttons(14, 11, getCurOwner(), variant);
 
     drawCursor(10 + cursorpos, 3 + (cursorowner * 3));
-    drawCursor(14 + precisioncursor, 9);
+    drawCursor(14 + precisioncursor, 12);
 }
 
 void drawbuttonparameters(int x, int y, suggestbutton_t &button) {
@@ -1030,10 +1028,10 @@ void draw() {
 
     suggestbutton_t button;
     bool s = getButFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), button);
-    if(s) drawbuttonparameters(1, 12, button);
+    if(s) drawbuttonparameters(1, 13, button);
 
-    drawlineparameters(60, 20);
-    drawinfo(50, 13);
+    drawlineparameters(60, 21);
+    drawinfo(50, 14);
 
     conscr::refresh();
 }
