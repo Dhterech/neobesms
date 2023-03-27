@@ -1,4 +1,5 @@
 #include "types.h"
+#include "config.h"
 #include <windows.h>
 #include <tlhelp32.h>
 
@@ -13,16 +14,11 @@ void setBaseAddr(UINT64 newBase) {
 
 bool pcsx2opened() {
     DWORD ec;
-    if(ps2_handle != NULL) {
-        if(GetExitCodeProcess(ps2_handle, &ec)) {
-            if(ec == STILL_ACTIVE) {
-                return true;
-            } else {
-                ps2_handle = NULL;
-                return false;
-            }
-        }
+    if(ps2_handle == NULL) return false;
+    if(GetExitCodeProcess(ps2_handle, &ec)) {
+        if(ec == STILL_ACTIVE) return true;
     }
+    ps2_handle = NULL;
     return false;
 }
 
@@ -32,33 +28,30 @@ static DWORD findprocessid(LPCWSTR name) {
     if(INVALID_HANDLE_VALUE == snapshot) return 0;
 
     pe.dwSize = sizeof(pe);
-    BOOL success = Process32FirstW(snapshot, &pe);
-    if(!success) return 0;
+    if(!Process32FirstW(snapshot, &pe)) return 0;
 
     do {
-        if(lstrcmpW(pe.szExeFile, name) == 0) {
+        if(!lstrcmpW(pe.szExeFile, name)) {
             CloseHandle(snapshot);
             return pe.th32ProcessID;
         }
-        success = Process32NextW(snapshot, &pe);
-    } while (success);
+    } while (Process32NextW(snapshot, &pe));
     return 0;
 }
 
 bool openpcsx2() {
     if(pcsx2opened()) return true;
 
-    wchar_t *pids[] = {L"pcsx2-parappa.exe", L"pcsx2.exe", L"pcsx2-qt.exe"};
+    wchar_t *procs[] = DEFAULT_PROC;
     DWORD pid;
-    for(wchar_t *p : pids) {
+    for(wchar_t *p : procs) {
         pid = findprocessid(p);
         if(pid != 0) break;
     }
     if(pid == 0) return false;
 
     ps2_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-    if(ps2_handle == NULL) return false;
-    return true;
+    return ps2_handle != NULL;
 }
 
 #define checkpcsx2() if(!openpcsx2()) { return false; }
@@ -73,8 +66,7 @@ bool read(u32 addr, void *out, u32 size) {
         SIZE_T(size),
         &readin
     );
-    if(!success) return false;
-    return true;
+    return success;
 }
 
 bool write(u32 addr, void *out, u32 size) {
@@ -87,8 +79,7 @@ bool write(u32 addr, void *out, u32 size) {
         SIZE_T(size),
         &written
     );
-    if(!success) return false;
-    return true;
+    return success;
 }
 
 template<typename T>

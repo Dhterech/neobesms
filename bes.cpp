@@ -12,6 +12,8 @@
 
 #include "config.h"
 
+#include <dsound.h>
+
 #define snwprintf swprintf
 
 std::vector<e_suggestrecord_t> records;
@@ -39,7 +41,7 @@ int paramcursorx = 0;
 int paramcursory = 0;
 int paramoverride = 0;
 
-int precisioncursorpos = 0;
+int precisioncursor = 0;
 int infocursor = 0;
 
 int owners[4] = {0x2, 0x4};
@@ -58,9 +60,9 @@ int current_stage = 0;
 #define PRESOURCE_LIST_BASE 0x1C46100
 #define PCURRENT_STAGE 0x1C63A74
 
-int subcount = 2;
-int curReg = 0;
-bool neosubtitles = false;
+int subcount = (DEFAULT_REGION != 1 ? 4 : 7);
+int curReg = DEFAULT_REGION;
+bool neosubtitles = DEFAULT_SUBS;
 int GAME_FRAMERATE[3] = {NGAME_FRAMERATE, PGAME_FRAMERATE, NGAME_FRAMERATE};
 int RESOURCE_LIST_BASE[3] = {NRESOURCE_LIST_BASE, PRESOURCE_LIST_BASE, JRESOURCE_LIST_BASE};
 int CURRENT_STAGE[3] = {NCURRENT_STAGE, PCURRENT_STAGE, JCURRENT_STAGE};
@@ -90,19 +92,13 @@ const wchar_t *difficulties[] = {
     L"Highest",
 };
 
-void loadsoundboard(int id) {
+void loadSoundboard(int id) {
     if(lastsbload == id) return;
-    if(id == -1) soundenv.load(soundboards[soundboards.size()-1]);
-    else soundenv.load(soundboards[id]);
+    soundenv.load(id == -1 ? soundboards[soundboards.size() - 1] : soundboards[id]);
     lastsbload = id;
 }
 
-void playsound(int id) {
-    loadsoundboard(records[current_record].soundboardid-1);
-    soundenv.play(id);
-}
-
-double gettime() {
+double getTime() {
     LARGE_INTEGER freq;
     LARGE_INTEGER current;
 
@@ -116,46 +112,45 @@ double gettime() {
     return double(numerator) + frac;
 }
 
-bool buttonfromsubdot(e_suggestvariant_t &variant, int owner, u32 subdot, suggestbutton_t &button) {
+bool getButFromSubdot(e_suggestvariant_t &variant, int owner, u32 subdot, suggestbutton_t &button) {
     for(e_suggestline_t &line : variant.lines) {
         if(!(line.owner & u32(owner))) continue;
-        if(line.containssubdot(subdot)) {
-            for(suggestbutton_t &b : line.buttons) {
-                if(b.timestamp + line.timestamp_start == subdot) { button = b; return true; }
-            }
+        if(!line.containssubdot(subdot)) continue;
+        
+        for(suggestbutton_t &b : line.buttons) {
+            if(b.timestamp + line.timestamp_start == subdot) { button = b; return true; }
         }
     }
     return false;
 }
 
-bool buttonreffromsubdot(e_suggestvariant_t &variant, int owner, u32 subdot, suggestbutton_t **button) {
+bool getButRefFromSubdot(e_suggestvariant_t &variant, int owner, u32 subdot, suggestbutton_t **button) {
     for(e_suggestline_t &line : variant.lines) {
         if(!(line.owner & u32(owner))) continue;
-        if(line.containssubdot(subdot)) {
-            for(suggestbutton_t &b : line.buttons) {
-                if(b.timestamp + line.timestamp_start == subdot) { *button = &b; return true; }
-            }
+        if(!line.containssubdot(subdot)) continue;
+
+        for(suggestbutton_t &b : line.buttons) {
+            if(b.timestamp + line.timestamp_start == subdot) { *button = &b; return true; }
         }
     }
     return false;
 }
 
-bool linereffromsubdot(e_suggestvariant_t &variant, int owner, u32 subdot, e_suggestline_t **line) {
+bool getLineRefFromSubdot(e_suggestvariant_t &variant, int owner, u32 subdot, e_suggestline_t **line) {
     for(e_suggestline_t &l : variant.lines) {
-        if(l.owner & u32(owner)) {
-            if(l.containssubdot(subdot)) { *line = &l; return true; }
-        }
+        if(!(l.owner & u32(owner))) continue;
+        if(l.containssubdot(subdot)) { *line = &l; return true; }
     }
     return false;
 }
 
 struct playtoken_t { double when; int soundid; };
-double bpmtospsd(double bpm) { return (15.0 / bpm) / 24.0; }
-bool tokensorter(playtoken_t a, playtoken_t b) { return (a.when < b.when); }
+double bpmToSpsd(double bpm) { return (15.0 / bpm) / 24.0; }
+bool tokenSorter(playtoken_t a, playtoken_t b) { return (a.when < b.when); }
 
-void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm, bool tick) {
+void playVariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm, bool tick) {
     std::vector<playtoken_t> tokens; playtoken_t token;
-    double spsd = bpmtospsd(bpm);
+    double spsd = bpmToSpsd(bpm);
     for(const e_suggestline_t &line : variant.lines) {
         for(const suggestbutton_t &button : line.buttons) {
             for(const soundentry_t &se : button.sounds) {
@@ -168,31 +163,33 @@ void playvariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm,
             }
         }
     }
-    std::sort(tokens.begin(), tokens.end(), tokensorter);
+    std::sort(tokens.begin(), tokens.end(), tokenSorter);
+
+    double lineend = (spsd * variant.lines[variant.lines.size() - 1].timestamp_end);
+    int i = 0;
+    double rtime = 0;
+    double nexttick = 0.0;
 
     conscr::writes(0,0,L" Press any key to stop playback"); conscr::refresh();
+    loadSoundboard(records[current_record].soundboardid - 1);
 
-    double nexttick = 0.0;
     double secondsperbeat = 60.0/bpm;
-    double timebase = gettime();
-    double rtime;
-    for(int i = 0; i < tokens.size(); i++) {
-        do {
-            rtime = gettime() - timebase;
-            if(rtime > nexttick && tick) { playticker(); nexttick += secondsperbeat; }
-            if(conscr::hasinput()) {
-                INPUT_RECORD ir;
-                conscr::read(ir);
-                if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {env.sounds.clear(); lastsbload = -1; return;}
-            }
-        } while(rtime <= tokens[i].when);
-        env.play(tokens[i].soundid);
+    double timebase = getTime();
+    while(rtime <= lineend + 0.35) {
+        rtime = getTime() - timebase;
+        if(rtime >= nexttick && tick) { playticker(); nexttick += secondsperbeat; }
+        if(rtime >= tokens[i].when && i < tokens.size()) { env.play(tokens[i].soundid); i++; }
+        if(conscr::hasinput()) {
+            INPUT_RECORD ir;
+            conscr::read(ir);
+            if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) { break; }
+        }
     }
+    env.stopAll();
 }
 
 void importStageInfo() {
-    int tmpReg = curReg;
-    if(curReg == 2) tmpReg = 0; // NTSC-J is equal NTSC's position
+    int tmpReg = (curReg == 2 ? 0 : curReg); // NTSC-J == NTSC
     currentstage.name = stages[current_stage].name;
     currentstage.bpm = stages[current_stage].bpm;
     currentstage.stagemodelistbase = stages[current_stage].regions[tmpReg].stagemodelistbase;
@@ -201,31 +198,44 @@ void importStageInfo() {
     currentstage.buttondataend = currentstage.stagemodelistbase - 1;
 }
 
-void showerror(const wchar_t *msg) {
+void waitkey() {
+    conscr::flushinputs();
+    for(;;) {
+        INPUT_RECORD ir;
+        conscr::read(ir);
+        if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return;
+    }
+}
+
+void logInfo(const wchar_t *msg) {
     for(int i = 0; i < 80; i++) conscr::putch(i,0,L' ');
     conscr::writes(0,0,msg);
     conscr::refresh();
 }
 
+void logWarn(const wchar_t *msg) {
+    logInfo(msg);
+    waitkey();
+}
+
 int importFromEmulator() {
-    current_stage = 0;
     if(!pcsx2reader::openpcsx2()) return 1;
-    showerror(L" Status: Reading current stage...");
+    logInfo(L" Status: Reading current stage...");
 	
     pcsx2reader::read(CURRENT_STAGE[curReg], &current_stage, 1); current_stage--;
-    showerror(L" Status: Getting stage info & sound database...");
+    logInfo(L" Status: Getting stage info & sound database...");
     importStageInfo();
     u32 hdlistbase = findhdbase(RESOURCE_LIST_BASE[curReg]);
     u32 bdlistbase = findbdbase(RESOURCE_LIST_BASE[curReg]);
     int numhd = getnumhd(hdlistbase);
 
-    showerror(L" Status: Reading game lines...");
+    logInfo(L" Status: Reading game lines...");
     records.clear();
-    try{
+    try {
         pcsx2GetRecFromModelist(currentstage.stagemodelistbase, records, (curReg == 1));
         pcsx2GetComBuffers(currentstage.stagemodelistbase, commands);
         pcsx2GetSoundboards(hdlistbase, bdlistbase, numhd, soundboards);
-        pcsx2DwnlKeytables(currentstage.keytablebase, numhd, 0, soundboards);
+        pcsx2GetKeytables(currentstage.keytablebase, numhd, 0, soundboards);
     } catch(...) { return 2; }
     return 0;
 }
@@ -238,10 +248,6 @@ int importFromEmulator() {
 #define FG_RED (FOREGROUND_RED | FOREGROUND_INTENSITY)
 #define FG_YELLOW (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
 #define FG_BLUE (FOREGROUND_BLUE | FOREGROUND_INTENSITY)
-
-void drawhorizontal(int x1, int x2, int y, wchar_t c, WORD attr) { // unused
-    for(int i = x1; i <= x2; i+=1) conscr::putchcol(i, y, c, attr);
-}
 
 wchar_t buttonidtowchar[] = {
     '?',
@@ -263,10 +269,10 @@ WORD buttonidtocol[] = {
     FG_BLUE
 };
 
-void drawbutton(int x, int y, int buttonid) { conscr::putchcol(x, y, buttonidtowchar[buttonid], buttonidtocol[buttonid]); }
-void drawcursor(int x, int y) { conscr::putchcol(x, y, L'^', FOREGROUND_GRAY); }
+void drawButton(int x, int y, int buttonid) { conscr::putchcol(x, y, buttonidtowchar[buttonid], buttonidtocol[buttonid]); }
+void drawCursor(int x, int y) { conscr::putchcol(x, y, L'^', FOREGROUND_GRAY); }
 
-bool dotisowned(int dot, int owner, e_suggestvariant_t &variant) {
+bool isDotOwned(int dot, int owner, e_suggestvariant_t &variant) {
     int subdot = dot * 24;
     for(e_suggestline_t &line : variant.lines) {
         if(line.owner & u32(owner)) if(line.containssubdot(subdot)) return true;
@@ -274,78 +280,66 @@ bool dotisowned(int dot, int owner, e_suggestvariant_t &variant) {
     return false;
 }
 
-bool linestartsat(int dot, int owner, e_suggestvariant_t &variant) {
+bool isLineStartingAt(int dot, int owner, e_suggestvariant_t &variant) {
     int mindot = dot * 24;
     int maxdot = mindot + 23;
     for(e_suggestline_t &line : variant.lines) {
-        if(line.owner & u32(owner)) {
-            if((line.timestamp_start >= mindot) && (line.timestamp_start <= maxdot)) return true;
-        }
+        if(!(line.owner & u32(owner))) continue;
+        if((line.timestamp_start >= mindot) && (line.timestamp_start <= maxdot)) return true;
     }
     return false;
 }
 
-int getcurrentvariantid() {
-    if(currentrecord.variants[current_variant].islinked) return currentrecord.variants[current_variant].linknum;
-    else return current_variant;
+e_suggestvariant_t &getCurVariant() {
+    int variantId = (currentrecord.variants[current_variant].islinked ? currentrecord.variants[current_variant].linknum : current_variant);
+    return currentrecord.variants[variantId];
 }
 
-e_suggestvariant_t &getcurrentvariant() {
-    if(currentrecord.variants[current_variant].islinked) return currentrecord.variants[currentrecord.variants[current_variant].linknum];
-    else return currentrecord.variants[current_variant];
+u32 getCurSubdot() { return (cursorpos * 24) + precisioncursor; }
+int getCurOwner() { return owners[cursorowner]; }
+
+bool lineSorter(e_suggestline_t &line1, e_suggestline_t &line2) {
+    return (line1.timestamp_start < line2.timestamp_start);
 }
 
-u32 getcurrentsubdot() { return (cursorpos * 24) + precisioncursorpos; }
-int getcurrentowner() { return owners[cursorowner]; }
-
-bool linesorter(e_suggestline_t &line1, e_suggestline_t &line2) {
-    if(line1.timestamp_start < line2.timestamp_start) return true;
-    return false;
-}
-
-bool buttonsorter(suggestbutton_t &button1, suggestbutton_t &button2) {
-    if(button1.timestamp < button2.timestamp) return true;
-    return false;
+bool buttonSorter(suggestbutton_t &button1, suggestbutton_t &button2) {
+    return (button1.timestamp < button2.timestamp);
 }
 
 void doleftexpand(u32 subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+    e_suggestvariant_t &variant = getCurVariant();
     int chosen = -1;
     for(int i = 0; i < variant.lines.size(); i++) {
         e_suggestline_t &line = variant.lines[i];
-        if(line.owner & u32(owner)) {
-            if(line.timestamp_start < subdot) {
-                if(chosen == -1) chosen = i;
-                else if(line.timestamp_start > variant.lines[chosen].timestamp_start) chosen = i;
-            }
+        if(!(line.owner & u32(owner))) continue;
+        if(line.timestamp_start < subdot) {
+            if(chosen == -1) chosen = i;
+            else if(line.timestamp_start > variant.lines[chosen].timestamp_start) chosen = i;
         }
     }
-    if(chosen != -1) {
-        e_suggestline_t &line = variant.lines[chosen];
-        int i = line.buttons.size() - 1;
-        line.timestamp_end = subdot;
-        if(i < 0) return;
+    if(chosen == -1) return;
+    e_suggestline_t &line = variant.lines[chosen];
+    line.timestamp_end = subdot;
+    int i = line.buttons.size() - 1;
+    if(i < 0) return;
 
-        while(i >= 0) {
-            if(!line.containssubdot(line.timestamp_start + line.buttons[i].timestamp)) {
-                line.buttons.erase(line.buttons.begin() + i);
-            }
-            i--;
+    while(i >= 0) {
+        if(!line.containssubdot(line.timestamp_start + line.buttons[i].timestamp)) {
+            line.buttons.erase(line.buttons.begin() + i);
         }
-
+        i--;
     }
 }
 
 void domoveleftline(u32 subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+    e_suggestvariant_t &variant = getCurVariant();
     int chosen = -1;
     for(int i = 0; i < variant.lines.size(); i++) {
         e_suggestline_t &line = variant.lines[i];
-        if(line.owner & u32(owner)) {
-            if(line.timestamp_start < subdot) {
-                if(chosen == -1) chosen = i;
-				else if(line.timestamp_start > variant.lines[chosen].timestamp_start) chosen = i;
-            }
+        if(!(line.owner & u32(owner))) continue;
+        if(line.timestamp_start < subdot) {
+            if(chosen == -1) chosen = i;
+            else if(line.timestamp_start > variant.lines[chosen].timestamp_start) chosen = i;
         }
     }
     if(chosen != -1) {
@@ -357,17 +351,16 @@ void domoveleftline(u32 subdot, int owner) {
 }
 
 void domoverightline(u32 subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+    e_suggestvariant_t &variant = getCurVariant();
     e_suggestline_t *pline = nullptr;
-    if(!linereffromsubdot(variant, owner, subdot, &pline)) {
+    if(!getLineRefFromSubdot(variant, owner, subdot, &pline)) {
         pline = nullptr;
         for(int i = 0; i < variant.lines.size(); i++) {
             e_suggestline_t &line = variant.lines[i];
-            if(line.owner & u32(owner)) {
-                if(line.timestamp_start > subdot) {
-                    if(pline == nullptr) pline = &line;
-                    else if(line.timestamp_start < pline->timestamp_start) pline = &line;
-                }
+            if(!(line.owner & u32(owner))) continue;
+            if(line.timestamp_start > subdot) {
+                if(pline == nullptr) pline = &line;
+                else if(line.timestamp_start < pline->timestamp_start) pline = &line;
             }
         }
     }
@@ -380,17 +373,16 @@ void domoverightline(u32 subdot, int owner) {
 }
 
 void dorightexpand(u32 subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+    e_suggestvariant_t &variant = getCurVariant();
     e_suggestline_t *pline = nullptr;
-    if(!linereffromsubdot(variant, owner, subdot, &pline)) {
+    if(!getLineRefFromSubdot(variant, owner, subdot, &pline)) {
         pline = nullptr;
         for(int i = 0; i < variant.lines.size(); i++) {
             e_suggestline_t &line = variant.lines[i];
-            if(line.owner & u32(owner)) {
-                if(line.timestamp_start > subdot) {
-                    if(pline == nullptr) pline = &line;
-					else if(line.timestamp_start < pline->timestamp_start) pline = &line;
-                }
+            if(!(line.owner & u32(owner))) continue;
+            if(line.timestamp_start > subdot) {
+                if(pline == nullptr) pline = &line;
+                else if(line.timestamp_start < pline->timestamp_start) pline = &line;
             }
         }
     }
@@ -409,11 +401,11 @@ void dorightexpand(u32 subdot, int owner) {
     }
 }
 
-void docreateline(u32 subdot_start, u32 subdot_end) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+void createLine(u32 subdot_start, u32 subdot_end) {
+    e_suggestvariant_t &variant = getCurVariant();
     e_suggestline_t *line;
 
-    if(linereffromsubdot(variant, getcurrentowner(), subdot_start, &line)) return;
+    if(getLineRefFromSubdot(variant, getCurOwner(), subdot_start, &line)) return;
     e_suggestline_t newline;
     newline.always_zero = 0;
     newline.coolmodethreshold = 150;
@@ -421,21 +413,21 @@ void docreateline(u32 subdot_start, u32 subdot_end) {
     newline.localisations[1] = NULL;
     newline.localisations[2] = NULL;
     newline.localisations[3] = NULL;
-    newline.owner = getcurrentowner();
+    newline.owner = getCurOwner();
     newline.timestamp_start = subdot_start;
     newline.timestamp_end = subdot_end;
 
     variant.lines.push_back(newline);
-    std::sort(variant.lines.begin(), variant.lines.end(), linesorter);
+    std::sort(variant.lines.begin(), variant.lines.end(), lineSorter);
 }
 
-void docreatebutton(u32 subdot, int owner, int buttonid) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+void createButton(u32 subdot, int owner, int buttonid) {
+    e_suggestvariant_t &variant = getCurVariant();
     suggestbutton_t newbutton;
 
     /* First check if the button exists, if yes, just change button id and leave */
     suggestbutton_t *bref;
-    if(buttonreffromsubdot(variant, owner, subdot, &bref)) { bref->buttonid = buttonid; return; }
+    if(getButRefFromSubdot(variant, owner, subdot, &bref)) { bref->buttonid = buttonid; return; }
 
     newbutton.buttonid = buttonid;
     for(soundentry_t &e : newbutton.sounds) {
@@ -446,29 +438,26 @@ void docreatebutton(u32 subdot, int owner, int buttonid) {
     }
 
     for(e_suggestline_t &line : variant.lines) {
-        if(line.owner & u32(owner)) {
-            if(line.containssubdot(subdot)) {
-                newbutton.timestamp = subdot - line.timestamp_start;
-                line.buttons.push_back(newbutton);
-                std::sort(line.buttons.begin(), line.buttons.end(), buttonsorter);
-            }
-        }
+        if(!(line.owner & u32(owner))) continue;
+        if(!line.containssubdot(subdot)) continue;
+
+        newbutton.timestamp = subdot - line.timestamp_start;
+        line.buttons.push_back(newbutton);
+        std::sort(line.buttons.begin(), line.buttons.end(), buttonSorter);
     }
 }
 
-void dodeletebutton(u32 subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
-
+void deleteButton(u32 subdot, int owner) {
+    e_suggestvariant_t &variant = getCurVariant();
     for(e_suggestline_t &line : variant.lines) {
-        if(line.owner & u32(owner)) {
-            if(line.containssubdot(subdot)) {
-                u32 rsubdot = subdot - line.timestamp_start;
-                for(int i = 0; i < line.buttons.size(); i++) {
-                    if(line.buttons[i].timestamp == rsubdot) {
-                        line.buttons.erase(line.buttons.begin() + i);
-                        return;
-                    }
-                }
+        if(!(line.owner & u32(owner))) continue;
+        if(!line.containssubdot(subdot)) continue;
+
+        u32 rsubdot = subdot - line.timestamp_start;
+        for(int i = 0; i < line.buttons.size(); i++) {
+            if(line.buttons[i].timestamp == rsubdot) {
+                line.buttons.erase(line.buttons.begin() + i);
+                return;
             }
         }
     }
@@ -476,12 +465,13 @@ void dodeletebutton(u32 subdot, int owner) {
 
 void changeButParameter(int amount) {
     suggestbutton_t *button;
-    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button)) {
+    if(getButRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), &button)) {
         soundentry_t &se = button->sounds[paramcursory];
         switch(paramcursorx) {
         case 0:
             se.soundid += amount;
-            playsound(se.soundid);
+            loadSoundboard(records[current_record].soundboardid-1);
+            soundenv.play(se.soundid);
             break;
         case 1:
             se.animationid += amount;
@@ -495,12 +485,12 @@ void changeButParameter(int amount) {
 
 void setButParameter() {
     suggestbutton_t *button;
-    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &button)) {
+    if(getButRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), &button)) {
         soundentry_t &se = button->sounds[paramcursory];
         switch(paramcursorx) {
         case 0:
             se.soundid = conscr::query_hex(L" Input: Type new SND (hex): ");
-            playsound(se.soundid);
+            soundenv.play(se.soundid);
             break;
         case 1:
             se.animationid = conscr::query_hex(L" Input: Type new ANIM (hex): ");
@@ -512,57 +502,46 @@ void setButParameter() {
     }
 }
 
-void docopybutton(u32 subdot) {
+void copyButton(u32 subdot) {
     suggestbutton_t button;
-    if(buttonfromsubdot(getcurrentvariant(), getcurrentowner(), subdot, button)) button_clipboard = button;
+    if(getButFromSubdot(getCurVariant(), getCurOwner(), subdot, button)) button_clipboard = button;
 }
 
-void dopastebutton(u32 subdot) {
+void pasteButton(u32 subdot) {
     suggestbutton_t *pbutton;
-    dodeletebutton(subdot, getcurrentowner());
-    docreatebutton(subdot, getcurrentowner(), 1);
+    deleteButton(subdot, getCurOwner());
+    createButton(subdot, getCurOwner(), 1);
 
-    if(buttonreffromsubdot(getcurrentvariant(), getcurrentowner(), subdot, &pbutton)) {
+    if(getButRefFromSubdot(getCurVariant(), getCurOwner(), subdot, &pbutton)) {
         suggestbutton_t &tocopy = button_clipboard;
         pbutton->buttonid = tocopy.buttonid;
         for(int i = 0; i < 4; i++) pbutton->sounds[i] = tocopy.sounds[i];
     }
 }
 
-void dodeleteline(int subdot, int owner) {
-    e_suggestvariant_t &variant = getcurrentvariant();
+void deleteLine(int subdot, int owner) {
+    e_suggestvariant_t &variant = getCurVariant();
     for(int i = 0; i < variant.lines.size(); i++) {
         e_suggestline_t &line = variant.lines[i];
-        if(line.owner & u32(owner)) {
-            if(line.containssubdot(subdot)) {
-                variant.lines.erase(variant.lines.begin() + i);
-                return;
-            }
-        }
+        if(!(line.owner & u32(owner))) continue;
+        if(!line.containssubdot(subdot)) continue;
+
+        variant.lines.erase(variant.lines.begin() + i);
+        return;
     }
 }
 
 void doadjustcoolthreshold(int amount) {
     e_suggestline_t *line;
-    if(!linereffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(),&line)) return;
+    if(!getLineRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(),&line)) return;
     line->coolmodethreshold = conscr::query_decimal(L" Input: Type new threshold: ");
-}
-
-void waitkey() {
-    conscr::flushinputs();
-    for(;;) {
-        INPUT_RECORD ir;
-        conscr::read(ir);
-        if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return;
-    }
 }
 
 void doadjustlink() {
     int linkid = conscr::query_decimal(L" Input: Type variant to link, or -1 to delete: ");
     if(linkid >= 17) {
         snwprintf(gbuf, 80, L" Error: Link identifier too high (%d)", linkid);
-        showerror(gbuf);
-        waitkey();
+        logWarn(gbuf);
         return;
     } else if(linkid == current_variant || linkid < 0) {
         e_suggestvariant_t &variant = currentrecord.variants[current_variant];
@@ -571,8 +550,7 @@ void doadjustlink() {
         return;
     }
     if(currentrecord.variants[linkid].islinked) {
-        showerror(L" Error: You can't link to a linked variant");
-        waitkey();
+        logWarn(L" Error: You can't link to a linked variant");
         return;
     }
     e_suggestvariant_t &variant = currentrecord.variants[current_variant];
@@ -588,30 +566,26 @@ void doadjustinfo() {
     case 1:
         doadjustcoolthreshold(0);
         break;
-    default:
-        break;
     }
 }
 
 void onkeypress(int k, wchar_t uc, bool shiftmod) {
+    // Line Cursor
     if(k == 'D') {
-        cursorpos++;
-        if(shiftmod) cursorpos = (cursorpos + 3) & (~3);
         int maxindex = (currentrecord.lengthinsubdots / 24) - 1;
-        if(cursorpos > maxindex) cursorpos = maxindex;
+        if(cursorpos < maxindex) cursorpos++;
+        if(shiftmod) cursorpos = (cursorpos + 3) & (~3);
     }
     else if(k == 'A') {
-        cursorpos--;
+        if(cursorpos > 0) cursorpos--;
         if(shiftmod) cursorpos &= (~3);
-        if(cursorpos < 0) cursorpos = 0;
     }
     else if(k == 'S') {
         if(shiftmod) {
             if(owners[cursorowner] == 0) owners[cursorowner] = 1;
             else owners[cursorowner] = int(u32(owners[cursorowner]) << 1);
         } else {
-            cursorowner++;
-            if(cursorowner >= numowners) cursorowner = numowners - 1;
+            if(cursorowner < numowners - 1) cursorowner++;
         }
     }
     else if(k == 'W') {
@@ -619,82 +593,72 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
             if(owners[cursorowner] == 0) owners[cursorowner] = int(u32(0x80000000));
             else owners[cursorowner] = int(u32(owners[cursorowner]) >> 1);
         } else {
-            cursorowner--;
-            if(cursorowner < 0) cursorowner = 0;
+            if(cursorowner > 0) cursorowner--;
         }
     }
     else if(k == 'Q') {
-        precisioncursorpos--;
-        if(shiftmod) precisioncursorpos &= (~3);
-        if(precisioncursorpos < 0) precisioncursorpos = 0;
+        if(precisioncursor > 0) precisioncursor--;
+        if(shiftmod) precisioncursor &= (~3);
     }
     else if(k == 'E') {
-        precisioncursorpos++;
-        if(shiftmod) precisioncursorpos = (precisioncursorpos + 3) & (~3);
-        if(precisioncursorpos > 23) precisioncursorpos = 23;
+        if(precisioncursor < 23) precisioncursor++;
+        if(shiftmod) precisioncursor = (precisioncursor + 3) & (~3);
     }
 	// Param cursor
     else if(k == 'I') {
-        paramcursory--;
-        if(paramcursory < 0) paramcursory = 0;
+        if(paramcursory > 0) paramcursory--;
     }
     else if(k == 'K') {
-        paramcursory++;
-        if(paramcursory > 3) paramcursory = 3;
+        if(paramcursory < 3) paramcursory++;
     }
     else if(k == 'J') {
-        paramcursorx--;
-        if(paramcursorx < 0) paramcursorx = 0;
+        if(paramcursorx > 0) paramcursorx--;
     }
     else if(k == 'L') {
-        paramcursorx++;
-        if(paramcursorx > 2) paramcursorx = 2;
+        if(paramcursorx < 2) paramcursorx++;
     }
     else if(k == 'O') { changeButParameter(shiftmod ? 0x100 : 1); }
     else if(k == 'U') { changeButParameter((shiftmod ? 0x100 : 1) * -1); }
-    else if(k == 'M') { doleftexpand(cursorpos * 24 + 24, getcurrentowner()); }
+    else if(k == 'M') { doleftexpand(cursorpos * 24 + 24, getCurOwner()); }
     else if(uc == L'[' || uc == L'{') {
-        if(shiftmod) domoveleftline(cursorpos * 24, getcurrentowner());
-		else doleftexpand(cursorpos * 24 + 24, getcurrentowner());
+        if(shiftmod) domoveleftline(cursorpos * 24, getCurOwner());
+		else doleftexpand(cursorpos * 24 + 24, getCurOwner());
     }
     else if(uc == L']' || uc == L'}') {
-        if(shiftmod) domoverightline(cursorpos * 24, getcurrentowner());
-        else dorightexpand(cursorpos * 24, getcurrentowner());
+        if(shiftmod) domoverightline(cursorpos * 24, getCurOwner());
+        else dorightexpand(cursorpos * 24, getCurOwner());
     }
+    // Variant/Difficulty
     else if(k == VK_DOWN) {
-        current_variant++;
-        if(current_variant > 16) current_variant = 16;
+        if(current_variant < 16) current_variant++;
     }
     else if(k == VK_UP) {
-        current_variant--;
-        if(current_variant < 0) current_variant = 0;
+        if(current_variant > 0) current_variant--;
     }
     else if(k == VK_LEFT) {
-        current_record--;
-        if(current_record < 0) current_record = 0;
+        if(current_record > 0) current_record--;
     }
     else if(k == VK_RIGHT) {
-        current_record++;
-        if(current_record >= records.size()) current_record = records.size() - 1;
+        if(current_record < records.size() - 1) current_record++;
     }
 	// Line Creation/Deleting
-    else if(k == VK_SPACE) { docreateline(cursorpos * 24, cursorpos * 24 + 24); }
-    else if(k == VK_BACK) { dodeleteline(getcurrentsubdot(), getcurrentowner()); }
+    else if(k == VK_SPACE) { createLine(cursorpos * 24, cursorpos * 24 + 24); }
+    else if(k == VK_BACK) { deleteLine(getCurSubdot(), getCurOwner()); }
 	// Button management
-    #define dcb(x) docreatebutton(getcurrentsubdot(), getcurrentowner(), x)
+    #define dcb(x) createButton(getCurSubdot(), getCurOwner(), x)
     else if(k == '1') { dcb(1); }
     else if(k == '2') { dcb(2); }
     else if(k == '3') { dcb(3); }
     else if(k == '4') { dcb(4); }
     else if(k == '5') { dcb(5); }
     else if(k == '6') { dcb(6); }
-    else if(k == '0') { dodeletebutton(getcurrentsubdot(), getcurrentowner()); }
     else if(k == '7') { dcb(0); }
-    else if(k == 'C') { docopybutton(getcurrentsubdot()); }
-    else if(k == 'V') { dopastebutton(getcurrentsubdot()); }
+    else if(k == '0') { deleteButton(getCurSubdot(), getCurOwner()); }
+    else if(k == 'C') { copyButton(getCurSubdot()); }
+    else if(k == 'V') { pasteButton(getCurSubdot()); }
     else if(k == 'P') {
-        loadsoundboard(currentrecord.soundboardid-1);
-        playvariant(getcurrentvariant(), soundenv, stages[current_stage].bpm, !shiftmod);
+        loadSoundboard(currentrecord.soundboardid - 1);
+        playVariant(getCurVariant(), soundenv, stages[current_stage].bpm, !shiftmod);
     }
     else if(k == VK_TAB) {
         infocursor++;
@@ -708,15 +672,13 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
         u32 totalsize = pcsx2calcsize(records, commands, oopslen, (curReg == 1));
         u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
         if(totalsize > origsize) {
-            showerror(L" Error: Data too large! Link some lines to spare space.");
-            waitkey();
+            logWarn(L" Error: Data too large! Link some lines to spare space.");
             return;
         }
-        showerror(L" Status: Uploading to PCSX2...");
+        logInfo(L" Status: Uploading to PCSX2...");
         bool result = pcsx2upload(records, commands, oopsdat, oopslen, currentstage.buttondatabase, currentstage.buttondataend, currentstage.stagemodelistbase, (curReg == 1), neosubtitles);
-        if(result) showerror(L" Info: Current lines are injected in PCSX2.");
-        else showerror(L" Error: There was an error injecting in PCSX2.");
-        waitkey();
+        if(result) logWarn(L" Info: Current lines are injected in PCSX2.");
+        else logWarn(L" Error: There was an error injecting in PCSX2.");
     }
 }
 
@@ -778,13 +740,7 @@ int saveProject(wchar_t *name) {
     for(int i = 0; i < soundboards.size(); i++) {
         e_soundboard_t &sb = soundboards[i];
         WRITE(sb.bd.len);
-        WriteFile(
-            hfile,
-            LPCVOID(sb.bd.bytes),
-            sb.bd.len,
-            &written,
-            NULL
-        );
+        WriteFile(hfile, LPCVOID(sb.bd.bytes), sb.bd.len, &written, NULL);
 
         tmpu32 = sb.keys.size(); WRITE(tmpu32);
         for(int k = 0; k < sb.keys.size(); k++) WRITE(sb.keys[k]);
@@ -830,7 +786,6 @@ int loadProject(wchar_t *name) {
     READ(tmpu32); records.resize(tmpu32);
     for(int i = 0; i < records.size(); i++) {
         e_suggestrecord_t &record = records[i];
-        u32 ib;
         READ(record.type);
         READ(record.lengthinsubdots);
         READ(record.soundboardid);
@@ -854,10 +809,7 @@ int loadProject(wchar_t *name) {
                 READ(line.unk2);
                 READ(tmpu32);
                 line.buttons.resize(tmpu32);
-                for(int n = 0; n < line.buttons.size(); n++) {
-                    suggestbutton_t &button = line.buttons[n];
-                    READ(button);
-                }
+                for(int n = 0; n < line.buttons.size(); n++) READ(line.buttons[n]);
             }
         }
     }
@@ -886,7 +838,7 @@ int loadProject(wchar_t *name) {
 // menu
 
 const wchar_t *optionlines[] = {
-	L"NeoBesms 20/03/2023",
+	L"NeoBesms 24/03/2023",
     L"",
 	L"",
     L"[F01] Save Project",
@@ -899,46 +851,44 @@ const wchar_t *optionlines[] = {
     L""
 };
 
-void drawoptions() {
+void drawOptions() {
     conscr::clearchars(L' ');
     conscr::clearcol(FOREGROUND_GRAY);
     optionlines[1] = regions[curReg];
     optionlines[10] = ((records.size() == 0) ? L"" : L"[ESC] Return to editor");
-	int optlines = (sizeof(optionlines) / sizeof(optionlines[0]));
-    for(int i = 0; i < optlines; i++) conscr::writes(1,1+i, optionlines[i]);
+	int optlines = sizeof(optionlines) / sizeof(optionlines[0]);
+    for(int i = 0; i < optlines; i++) conscr::writes(1, i + 1, optionlines[i]);
     conscr::refresh();
 }
 
-void onoptionskey(int k, wchar_t uc, bool shiftmod) {
+void onOptionsKey(int k, wchar_t uc, bool shiftmod) {
     wchar_t filename[MAX_PATH];
     if(k == VK_F9) {
         current_record = 0; current_variant = 0;
         if(shiftmod) pcsx2reader::setBaseAddr(conscr::query_hexU(L" Input: EE Memory Start Address (hex): "));
         int result = importFromEmulator();
         if(result == 0) menu_options = false;
-        else if(result == 1) { showerror(L" Error: PCSX2 process not found!"); waitkey(); }
-        else if(result == 2) { showerror(L" Error: Cannot load data correctly. Wrong region maybe?"); waitkey(); }
+        else if(result == 1) logWarn(L" Error: PCSX2 process not found!");
+        else if(result == 2) logWarn(L" Error: Cannot load data correctly. Wrong region maybe?");
     }
     else if(k == VK_F1) {
         if(conscr::query_string(L" Input: Save as: ", filename, MAX_PATH) == 0) return;
         int result = saveProject(filename);
-        if(result == 0) { snwprintf(gbuf, 80, L"Saved as %ls", filename); showerror(gbuf); }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %d", filename, result); showerror(gbuf); }
-        waitkey();
+        if(result == 0) { snwprintf(gbuf, 80, L"Saved as %ls", filename); logInfo(gbuf); }
+		else { snwprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %d", filename, result); logWarn(gbuf); }
     }
     else if(k == VK_F3) {
         if(conscr::query_string(L" Input: Load Path: ", filename, MAX_PATH) == 0) return;
         int result = loadProject(filename);
         if(result == 0) { menu_options = false; }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls, Error: %d. Please check if file exists", filename, result); showerror(gbuf); waitkey(); }
+		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls, Error: %d. Please check if file exists", filename, result); logWarn(gbuf); }
     }
     //else if(k == VK_F6) { neosubtitles = !neosubtitles; }
     else if(k == VK_F5) {
         if(conscr::query_string(L" Input: OLM File Path: ", filename, MAX_PATH) == 0) return;
         importStageInfo();
-        if(olmupload(filename)) {snwprintf(gbuf, 80, L" Info: Uploaded OLM file: %ls", filename); showerror(gbuf);}
-        else snwprintf(gbuf, 80, L" Error: Failed to upload OLM file: %ls", filename); showerror(gbuf);
-        waitkey();
+        if(olmupload(filename)) {snwprintf(gbuf, 80, L" Info: Uploaded OLM file: %ls", filename); logWarn(gbuf);}
+        else {snwprintf(gbuf, 80, L" Error: Failed to upload OLM file: %ls", filename); logWarn(gbuf);}
     }
 	else if(k == VK_F10) {
 		curReg++;
@@ -946,16 +896,16 @@ void onoptionskey(int k, wchar_t uc, bool shiftmod) {
         if(curReg != 1) subcount = 4; else subcount = 7;
     }
     else if(k == VK_ESCAPE) {
-	    if(records.size() == 0) {showerror(L" Error: There is no data to edit. Please load something from the menu."); waitkey();}
-		else { menu_options = false; }
+	    if(records.size() == 0) logWarn(L" Error: There is no data to edit. Please load something from the menu.");
+		else menu_options = false;
     }
 }
 
 void drawvariant_base(int x, int y, int owner, e_suggestvariant_t &variant, int length) {
     int ndots = length / 24;
     for(int i = 0; i < ndots; i++) {
-        wchar_t chartoput = ((i % 4) == 0) ? L'*' : L'-';
-        WORD attrtoput = dotisowned(i, owner, variant) ? FOREGROUND_GRAY : FOREGROUND_INTENSITY;
+        wchar_t chartoput = !(i % 4) ? L'*' : L'-';
+        WORD attrtoput = isDotOwned(i, owner, variant) ? FOREGROUND_GRAY : FOREGROUND_INTENSITY;
         conscr::putchcol(x + i, y, chartoput, attrtoput);
     }
 }
@@ -963,16 +913,14 @@ void drawvariant_base(int x, int y, int owner, e_suggestvariant_t &variant, int 
 void drawlinemarkers(int x, int y, int owner, e_suggestvariant_t &variant, int length) {
     int ndots = length / 24;
     for(int i = 0; i < ndots; i++) {
-        if(linestartsat(i, owner, variant)) conscr::putchcol(x + i, y, L'$', FOREGROUND_GRAY);
+        if(isLineStartingAt(i, owner, variant)) conscr::putchcol(x + i, y, L'$', FOREGROUND_GRAY);
     }
 }
 
 void drawprecision_base(int x, int y, int owner, e_suggestvariant_t &variant) {
-    bool owned = dotisowned(cursorpos, owner, variant);
-    WORD attrtoput = owned ? FOREGROUND_GRAY : FOREGROUND_INTENSITY;
-
+    WORD attrtoput = isDotOwned(cursorpos, owner, variant) ? FOREGROUND_GRAY : FOREGROUND_INTENSITY;
     for(int i = 0; i < 24; i++) {
-        wchar_t chartoput = (((i % 4) == 0) ? L'*' : L'-');
+        wchar_t chartoput = !(i % 4) ? L'*' : L'-';
         conscr::putchcol(x + i, y, chartoput, attrtoput);
     }
 }
@@ -981,14 +929,14 @@ void drawprecision_buttons(int x, int y, int owner, e_suggestvariant_t &variant)
     u32 subdotbase = cursorpos * 24;
     suggestbutton_t button;
     for(int i = 0; i < 24; i++) {
-        if(buttonfromsubdot(variant, owner, subdotbase + i, button)) drawbutton(x + i, y, button.buttonid);
+        if(getButFromSubdot(variant, owner, subdotbase + i, button)) drawButton(x + i, y, button.buttonid);
     }
 }
 
 void drawvariant(int x, int y, int owner, e_suggestvariant_t &variant, int length) {
     suggestbutton_t button;
     for(int i = 0; i < length; i++) {
-        if(buttonfromsubdot(variant, owner, i, button)) drawbutton((i / 24) + x, y, button.buttonid);
+        if(getButFromSubdot(variant, owner, i, button)) drawButton((i / 24) + x, y, button.buttonid);
     }
 }
 
@@ -1011,8 +959,7 @@ void drawownername(int x, int y, int ownerid) {
     else conscr::writes(x,y,ownernames[cid]);
 }
 
-void drawrecord(e_suggestrecord_t &record, int variantid) {
-    e_suggestvariant_t &variant = record.variants[variantid];
+void drawrecord(e_suggestrecord_t &record, e_suggestvariant_t &variant) {
     drawownername(1,2,owners[0]);
     drawlinemarkers(10,1,owners[0],variant, record.lengthinsubdots);
     drawvariant_base(10, 2, owners[0], variant, record.lengthinsubdots);
@@ -1023,11 +970,11 @@ void drawrecord(e_suggestrecord_t &record, int variantid) {
     drawvariant_base(10, 5, owners[1], variant, record.lengthinsubdots);
     drawvariant(10,5,owners[1], variant, record.lengthinsubdots);
 
-    drawprecision_base(14, 8, getcurrentowner(), variant);
-    drawprecision_buttons(14,8, getcurrentowner(), variant);
+    drawprecision_base(14, 8, getCurOwner(), variant);
+    drawprecision_buttons(14,8, getCurOwner(), variant);
 
-    drawcursor(10 + cursorpos, 3 + (cursorowner * 3));
-    drawcursor(14 + precisioncursorpos, 9);
+    drawCursor(10 + cursorpos, 3 + (cursorowner * 3));
+    drawCursor(14 + precisioncursor, 9);
 }
 
 void drawbuttonparameters(int x, int y, suggestbutton_t &button) {
@@ -1043,8 +990,7 @@ void drawbuttonparameters(int x, int y, suggestbutton_t &button) {
 
 void drawlineparameters(int x, int y) {
     e_suggestline_t *line;
-    bool s = linereffromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), &line);
-    if(!s) return;
+    if(!getLineRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), &line)) return;
 
     snwprintf(gbuf, 80, L"COOL: %d", line->coolmodethreshold);
     conscr::writescol(x+1,y,gbuf,FOREGROUND_GRAY);
@@ -1052,20 +998,20 @@ void drawlineparameters(int x, int y) {
 }
 
 void drawinfo(int x, int y) {
-    snwprintf(gbuf, 80, L"Stage: %d  %ls", current_stage, stages[current_stage].name);
+    snwprintf(gbuf, 80, L"Stage: %d  %ls", current_stage + 1, stages[current_stage].name);
     conscr::writescol(x, y, gbuf, FOREGROUND_GRAY);
 
     snwprintf(gbuf, 80, L"Record: %d", current_record);
     conscr::writescol(x, y+1, gbuf, FOREGROUND_GRAY);
 
     snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);
-    conscr::writescol(x,y+2,gbuf,FOREGROUND_GRAY);
+    conscr::writescol(x,y+2,gbuf, FOREGROUND_GRAY);
 
-    if(infocursor == 0) conscr::putchcol(x-1,y+3,L'>',FOREGROUND_GRAY);
+    if(infocursor == 0) conscr::putchcol(x-2,y+3,L'>', FOREGROUND_GRAY);
     if(currentrecord.variants[current_variant].islinked) {
         snwprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
-        conscr::writescol(x+1,y+3,gbuf,FOREGROUND_WHITE);
-    } else conscr::writescol(x+1,y+3, L"Not linked",FOREGROUND_INTENSITY);
+        conscr::writescol(x,y+3,gbuf, FOREGROUND_WHITE);
+    } else conscr::writescol(x,y+3, L"Not linked", FOREGROUND_INTENSITY);
 
     u32 totalsize = pcsx2calcsize(records, commands, oopslen, (curReg == 1));
     u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
@@ -1073,17 +1019,17 @@ void drawinfo(int x, int y) {
     WORD attr = (totalsize > origsize) ? (FG_RED) : (FG_GREEN);
 
     snwprintf(gbuf, 80, L"%d / %d bytes", totalsize, origsize);
-    conscr::writescol(x, y+4, gbuf, attr);
+    conscr::writescol(x, y+5, gbuf, attr);
 }
 
 void draw() {
     conscr::clearchars(L' ');
     conscr::clearcol(FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
 
-    drawrecord(currentrecord, getcurrentvariantid());
+    drawrecord(currentrecord, getCurVariant());
 
     suggestbutton_t button;
-    bool s = buttonfromsubdot(getcurrentvariant(), getcurrentowner(), getcurrentsubdot(), button);
+    bool s = getButFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), button);
     if(s) drawbuttonparameters(1, 12, button);
 
     drawlineparameters(60, 20);
@@ -1093,23 +1039,20 @@ void draw() {
 }
 
 void sandbox() {
-    menu_options = true;
-    current_record = 0;
-
     for(;;) {
         INPUT_RECORD ir;
         SwitchToThread();
 		while(conscr::hasinput()) {
 			conscr::read(ir);
 			if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {
-				if(menu_options) {onoptionskey(ir.Event.KeyEvent.wVirtualKeyCode,
+				if(menu_options) {onOptionsKey(ir.Event.KeyEvent.wVirtualKeyCode,
 					ir.Event.KeyEvent.uChar.UnicodeChar,
 					ir.Event.KeyEvent.dwControlKeyState & SHIFT_PRESSED);}
                 else {onkeypress(ir.Event.KeyEvent.wVirtualKeyCode,
 					ir.Event.KeyEvent.uChar.UnicodeChar,
 					ir.Event.KeyEvent.dwControlKeyState & SHIFT_PRESSED);}
 			}
-			if(menu_options) { drawoptions(); } else { draw(); }
+			if(menu_options) { drawOptions(); } else { draw(); }
 		}
     }
 }

@@ -12,15 +12,12 @@ u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbu
         e_suggestrecord_t &record = records[i];
         for(int k = 0; k < 17; k += 1) {
             e_suggestvariant_t &variant = record.variants[k];
-            if(variant.islinked == false) {
-                int linesize;
-                if(isPAL) linesize = sizeof(suggestline_t_pal);
-                else linesize = sizeof(suggestline_t);
-                acc += linesize * variant.lines.size();
-                for(int m = 0; m < variant.lines.size(); m += 1) {
-                    e_suggestline_t &line = variant.lines[m];
-                    acc += sizeof(suggestbutton_t) * line.buttons.size();
-                }
+            if(variant.islinked == true) continue;
+            int linesize = (isPAL ? sizeof(suggestline_t_pal) : sizeof(suggestline_t));
+            acc += linesize * variant.lines.size();
+            for(int m = 0; m < variant.lines.size(); m++) {
+                e_suggestline_t &line = variant.lines[m];
+                acc += sizeof(suggestbutton_t) * line.buttons.size();
             }
         }
     }
@@ -35,21 +32,17 @@ u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbu
 #define UPLOAD_SIZE(y,x,s) pcsx2reader::write(y, &(x), s)
 #define DOWNLOAD_SIZE(y,x,s) pcsx2reader::read(y, &(x), s)
 
-u32 applymetafixup(u32 start, u32 fixup, bool skip) {
+u32 applymetafixup(u32 start, u32 fixup) {
     u32 caddr = start;
     u32 ptrinmem = 0;
     u32 oldaddr = 0;
 
     for(;;) {
         pcsx2reader::read(caddr, &ptrinmem, 4);
-
-        if((ptrinmem & 0x1000000) == 0) {caddr += 4; continue;}
-
+        if(!(ptrinmem & 0x1000000)) {caddr += 4; continue;}
         if(oldaddr == 0) oldaddr = ptrinmem;
-
         if(ptrinmem != oldaddr) return caddr;
-
-        if(!skip) UPLOAD_NOMOVE(caddr, fixup);
+        UPLOAD_NOMOVE(caddr, fixup);
         caddr += 4;
     }
 }
@@ -69,27 +62,22 @@ bool pcsx2upload(
     u32 count = dataend - datastart + 1;
     if(pcsx2calcsize(records, buffers, oopslen, isPAL) > count) return false;
     DOWNLOAD_SIZE(stagemodelistbase, modes[0], sizeof(modes));
-    for(int i = 0; i < 9; i += 1) {
+    for(int i = 0; i < 9; i++) {
         mb[i] = a;
         modes[i].ptr_scenecommands = mb[i];
-        for(int k = 0; k < buffers[i].size(); k += 1) {UPLOAD(a, buffers[i][k]);}
+        for(int k = 0; k < buffers[i].size(); k++) {UPLOAD(a, buffers[i][k]);}
     }
     UPLOAD_NOMOVE(stagemodelistbase, modes);
     UPLOAD_SIZE(a, oopsdat[0], oopslen);
     ptr_oops_teach = a;
     ptr_oops_parap = ptr_oops_teach + (sizeof(suggestbutton_t) * 6);
     a += oopslen;
-    for(int i = 0; i < records.size(); i += 1) {
+    for(int i = 0; i < records.size(); i++) {
         e_suggestrecord_t &record = records[i];
-        /* FIXME
-            Injecting cool record breaks getting worse/better
-            and cool mode itself
-        */
-        //if(record.iscool) continue;
         suggestrecord_t ps2record;
         u32 linebase;
 
-        for(int k = 0; k < 17; k += 1) {
+        for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
             suggestvariant_t &ps2variant = ps2record.variants[k];
             if(variant.islinked) continue;
@@ -102,7 +90,7 @@ bool pcsx2upload(
             ps2variant.numlines = variant.lines.size();
             ps2variant.ptr_lines = linebase;
 
-            for(int m = 0; m < variant.lines.size(); m += 1) {
+            for(int m = 0; m < variant.lines.size(); m++) {
                 e_suggestline_t &line = variant.lines[m];
                 suggestline_t ps2line;
                 suggestline_t_pal ps2lineP;
@@ -110,10 +98,10 @@ bool pcsx2upload(
                 if(!isPAL) {
                     ps2line.buttoncount = line.buttons.size();
                     ps2line.ptr_buttons = buttonbase;
-                    for(int n = 0; n < line.buttons.size(); n += 1) {UPLOAD(buttonbase, line.buttons[n]);}
+                    for(int n = 0; n < line.buttons.size(); n++) {UPLOAD(buttonbase, line.buttons[n]);}
                     ps2line.always_zero = 0;
                     ps2line.coolmodethreshold = line.coolmodethreshold;
-                    for(int t = 0; t < 4; t += 1) {ps2line.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);}
+                    for(int t = 0; t < 4; t++) {ps2line.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);}
                     ps2line.owner = line.owner;
                     ps2line.timestamp_start = line.timestamp_start;
                     ps2line.timestamp_end = line.timestamp_end;
@@ -123,10 +111,10 @@ bool pcsx2upload(
                 } else {
                     ps2lineP.buttoncount = line.buttons.size();
                     ps2lineP.ptr_buttons = buttonbase;
-                    for(int n = 0; n < line.buttons.size(); n += 1) {UPLOAD(buttonbase, line.buttons[n]);}
+                    for(int n = 0; n < line.buttons.size(); n++) {UPLOAD(buttonbase, line.buttons[n]);}
                     ps2lineP.always_zero = 0;
                     ps2lineP.coolmodethreshold = line.coolmodethreshold;
-                    for(int t = 0; t < 7; t += 1) {ps2lineP.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);} // u32(~0)
+                    for(int t = 0; t < 7; t++) {ps2lineP.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);} // u32(~0)
                     ps2lineP.owner = line.owner;
                     ps2lineP.timestamp_start = line.timestamp_start;
                     ps2lineP.timestamp_end = line.timestamp_end;
@@ -137,7 +125,7 @@ bool pcsx2upload(
             }
             a = linebase; /* linebase is actually after all lines */
         }
-        for(int k = 0; k < 17; k += 1) {
+        for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
             suggestvariant_t &ps2variant = ps2record.variants[k];
             if(variant.islinked) {
@@ -150,12 +138,10 @@ bool pcsx2upload(
         ps2record.soundboardid = record.soundboardid;
         memcpy(ps2record.unk, record.unk, sizeof(ps2record.unk));
 
-        if((record.type == 1)) {
-            for(int k = 1; k < 4; k += 1) {
-                mb[k] = applymetafixup(mb[k], a, false);
-            }
+        if(record.type == 1) {
+            for(int k = 1; k < 4; k += 1) mb[k] = applymetafixup(mb[k], a);
         } else {
-            mb[record.type] = applymetafixup(mb[record.type], a, false);
+            mb[record.type] = applymetafixup(mb[record.type], a);
         }
         UPLOAD(a, ps2record);
     }
@@ -189,5 +175,5 @@ bool olmupload(wchar_t *filename) {
     int result = pcsx2reader::write(OLM_LINK_ADDRESS, buffer, (u32)lowFileSiz + 1);
 
     CloseHandle(hfile);
-    if(result) return true; else return false;
+    return result;
 }

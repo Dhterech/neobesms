@@ -15,8 +15,6 @@ struct currentstage_t {
 struct regioninfo_t {
     u32 stagemodelistbase;
     u32 keytablebase;
-    u32 buttondatabase;
-    u32 buttondataend;
 };
 
 struct stageinfo_t {

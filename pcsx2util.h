@@ -35,7 +35,7 @@ void pcsx2GetSoundboards(
     std::vector<e_soundboard_t> &sblist
 );
 
-void pcsx2DwnlKeytables(
+void pcsx2GetKeytables(
     u32 keylistbase,
     int count,
     int sbbase,

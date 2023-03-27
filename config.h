@@ -1,16 +1,10 @@
 #ifndef BES_CONFIG_H
 #define BES_CONFIG_H
 
-/*
-GAME_VERSION
-  NTSC - Only supported version
-  PAL - (not supported)
-  NTSCJ - (not supported)
-*/
+#define DEFAULT_REGION 0     // 0 NTSC, 1 PAL, 2 NTSC-J
+#define DEFAULT_SUBS   false // Keep subtitles (may break saved projects)
 
-//USING_WINDOWS doesn't change anything anymore atm
-#define USING_WINDOWS
-
-#define GAME_VERSION NTSC
+// Default processes names to search for
+#define DEFAULT_PROC { L"pcsx2.exe", L"pcsx2-parappa.exe", L"pcsx2-qt.exe" }
 
 #endif // BES_CONFIG_H

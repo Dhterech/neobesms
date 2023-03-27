@@ -56,11 +56,11 @@ void putchcol(int x, int y, wchar_t c, WORD attr) {
 
 void writes(int x, int y, LPCWSTR s) {
     int len = lstrlenW(s);
-    for(int i = 0; i < len; i += 1) putch(x+i, y, s[i]);
+    for(int i = 0; i < len; i++) putch(x+i, y, s[i]);
 }
 
 void writecol(int x, int y, int len, WORD attr) {
-    for(int i = 0; i < len; i += 1) putcol(x+i, y, attr);
+    for(int i = 0; i < len; i++) putcol(x+i, y, attr);
 }
 
 void writescol(int x, int y, LPCWSTR s, WORD attr) {
@@ -72,15 +72,13 @@ bool hasinput() {
     DWORD nevents;
     INPUT_RECORD ir;
     PeekConsoleInputW(stdInH, &ir, 1, &nevents);
-    if(nevents > 0) return true;
-    return false;
+    return nevents > 0;
 }
 
 bool read(INPUT_RECORD &ir) {
     DWORD nevents;
     ReadConsoleInputW(stdInH, &ir, 1, &nevents);
-    if(nevents == 0) return false;
-    return true;
+    return nevents != 0;
 }
 
 void flushinputs() {
@@ -102,12 +100,7 @@ static char mygetchA() {
 }
 
 static wchar_t mygetchW() {
-    DWORD readn;
-    WCHAR buf[4];
-    do {
-        ReadConsoleW(stdInH, LPVOID(buf), 1, &readn, NULL);
-    } while(readn <= 0);
-    return wchar_t(buf[0]);
+    return wchar_t(mygetchA());
 }
 
 static int mygetsA(char *buf, int n) {
@@ -118,13 +111,13 @@ static int mygetsA(char *buf, int n) {
 	    if(a == '\r') continue;
 	    if(a == '\n') break;
 	    *cbuf = a;
-	    cbuf += 1;
+	    cbuf++;
     }
     *cbuf = char(0);
     return c;
 }
 
-static int mygetsW(wchar_t *buf, int n) {
+static int mygetsW(wchar_t *buf, int n) { // this
     wchar_t *cbuf = buf;
     int c = 0;
     while(c < n) {
@@ -132,7 +125,7 @@ static int mygetsW(wchar_t *buf, int n) {
 	    if(w == L'\r') continue;
 	    if(w == L'\n') break;
 	    *cbuf = w;
-	    cbuf += 1;
+	    cbuf++;
     }
     *cbuf = wchar_t(0);
     return c;
@@ -148,9 +141,8 @@ int query_decimal(const wchar_t *msg) {
     mygetsA(buf, 16);
     buf[15] = char(0);
 
-    int x = atoi(buf);
     SetConsoleCursorPosition(stdOutH, {0,0});
-    return x;
+    return atoi(buf);
 }
 
 int query_hex(const wchar_t *msg) {
@@ -163,9 +155,8 @@ int query_hex(const wchar_t *msg) {
     mygetsA(buf, 16);
     buf[15] = char(0);
 
-    int x = strtol(buf, NULL, 0x10);
     SetConsoleCursorPosition(stdOutH, {0,0});
-    return x;
+    return strtol(buf, NULL, 0x10);
 }
 
 UINT64 query_hexU(const wchar_t *msg) {
@@ -178,9 +169,8 @@ UINT64 query_hexU(const wchar_t *msg) {
     mygetsA(buf, 16);
     buf[15] = char(0);
 
-    unsigned long long x = strtoull(buf, NULL, 0x10);
     SetConsoleCursorPosition(stdOutH, {0,0});
-    return x;
+    return strtoull(buf, NULL, 0x10);
 }
 
 int query_string(const wchar_t *msg, wchar_t *out, int maxchars) {
@@ -195,7 +185,7 @@ int query_string(const wchar_t *msg, wchar_t *out, int maxchars) {
     if(out[slen-1] == L'\n') out[slen-1] = wchar_t(0);
 
     SetConsoleCursorPosition(stdOutH, {0,0});
-    return lstrlenW(out);
+    return lstrlenW(out); // ?
 }
 
 };

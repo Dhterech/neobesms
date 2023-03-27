@@ -52,6 +52,7 @@ struct soundenv_t {
     void clear();
     void load(const e_soundboard_t &sb);
     void play(int key);
+    void stopAll();
 };
 
 void loadticker();
