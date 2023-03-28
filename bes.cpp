@@ -998,8 +998,8 @@ void drawlineparameters(int x, int y) {
     if(!getLineRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), &line)) return;
 
     snwprintf(gbuf, 80, L"COOL: %d", line->coolmodethreshold);
-    conscr::writescol(x+1,y,gbuf,FOREGROUND_GRAY);
-    if(infocursor == 1) conscr::putchcol(x, y, L'>', FOREGROUND_GRAY);
+    conscr::writescol(x + 1, y, gbuf, FOREGROUND_GRAY);
+    if(infocursor == 1) conscr::putchcol(x - 1, y, L'>', FOREGROUND_GRAY);
 }
 
 void drawinfo(int x, int y) {
@@ -1010,13 +1010,13 @@ void drawinfo(int x, int y) {
     conscr::writescol(x, y+1, gbuf, FOREGROUND_GRAY);
 
     snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);
-    conscr::writescol(x,y+2,gbuf, FOREGROUND_GRAY);
+    conscr::writescol(x, y+2, gbuf, FOREGROUND_GRAY);
 
     if(infocursor == 0) conscr::putchcol(x-2,y+3,L'>', FOREGROUND_GRAY);
     if(currentrecord.variants[current_variant].islinked) {
         snwprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
-        conscr::writescol(x,y+3,gbuf, FOREGROUND_WHITE);
-    } else conscr::writescol(x,y+3, L"Not linked", FOREGROUND_INTENSITY);
+        conscr::writescol(x, y+3, gbuf, FOREGROUND_WHITE);
+    } else conscr::writescol(x, y+3, L"Not linked", FOREGROUND_INTENSITY);
 
     u32 totalsize = pcsx2calcsize(records, commands, oopslen, (curReg == 1));
     u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
