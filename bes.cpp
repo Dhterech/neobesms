@@ -2,7 +2,6 @@
 #include "suggest.h"
 #include "pcsx2reader.h"
 #include "ss.h"
-//#include "adpcm.h"
 #include "pcsx2util.h"
 #include "stageinfo.h"
 #include <stdlib.h>
@@ -142,11 +141,16 @@ bool getLineRefFromSubdot(e_suggestvariant_t &variant, int owner, u32 subdot, e_
     return false;
 }
 
+void playSound(int soundid) {
+    loadSoundboard(currentrecord.soundboardid - 1);
+    soundenv.play(soundid);
+}
+
 struct playtoken_t { double when; int soundid; };
 double bpmToSpsd(double bpm) { return (15.0 / bpm) / 24.0; }
 bool tokenSorter(playtoken_t a, playtoken_t b) { return (a.when < b.when); }
 
-void playVariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm, bool tick) {
+void playVariant(const e_suggestvariant_t &variant, double bpm, bool tick) {
     std::vector<playtoken_t> tokens; playtoken_t token;
     double spsd = bpmToSpsd(bpm);
     for(const e_suggestline_t &line : variant.lines) {
@@ -167,23 +171,21 @@ void playVariant(const e_suggestvariant_t &variant, soundenv_t &env, double bpm,
     int i = 0;
     double rtime = 0;
     double nexttick = 0.0;
+    INPUT_RECORD ir;
 
     conscr::writes(0,0,L" Press any key to stop playback"); conscr::refresh();
-    loadSoundboard(currentrecord.soundboardid - 1);
 
     double secondsperbeat = 60.0/bpm;
     double timebase = getTime();
     while(rtime <= lineend + 0.35) {
         rtime = getTime() - timebase;
         if(rtime >= nexttick && tick) { playticker(); nexttick += secondsperbeat; }
-        if(rtime >= tokens[i].when && i < tokens.size()) { env.play(tokens[i].soundid); i++; }
-        if(conscr::hasinput()) {
-            INPUT_RECORD ir;
-            conscr::read(ir);
+        if(tokens.size() != 0 && rtime >= tokens[i].when && i < tokens.size()) { playSound(tokens[i].soundid); i++; }
+        if(conscr::hasinput() && conscr::read(ir)) {
             if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) { break; }
         }
     }
-    env.stopAll();
+    soundenv.stopAll();
 }
 
 void importStageInfo() {
@@ -198,10 +200,9 @@ void importStageInfo() {
 
 void waitKey() {
     conscr::flushinputs();
+    INPUT_RECORD ir;
     for(;;) {
-        INPUT_RECORD ir;
-        conscr::read(ir);
-        if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return;
+        if(conscr::read(ir) && ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) return; 
     }
 }
 
@@ -468,8 +469,7 @@ void changeButParameter(int amount) {
         switch(paramcursorx) {
         case 0:
             se.soundid += amount;
-            loadSoundboard(records[current_record].soundboardid-1);
-            soundenv.play(se.soundid);
+            playSound(se.soundid);
             break;
         case 1:
             se.animationid += amount;
@@ -488,7 +488,7 @@ void setButParameter() {
         switch(paramcursorx) {
         case 0:
             se.soundid = conscr::query_hex(L" Input: Type new SND (hex): ");
-            soundenv.play(se.soundid);
+            playSound(se.soundid);
             break;
         case 1:
             se.animationid = conscr::query_hex(L" Input: Type new ANIM (hex): ");
@@ -498,6 +498,12 @@ void setButParameter() {
             break;
         }
     }
+}
+
+void setRecSoundboard(u32 subdot) {
+    int sbid = conscr::query_decimal(L" Input: Enter a new Soundboard number: ");
+    if(sbid > soundboards.size() - 1 || sbid < 0) { logWarn(L" Error: Soundboard number too high."); return;}
+    currentrecord.soundboardid = sbid;
 }
 
 void copyButton(u32 subdot) {
@@ -660,7 +666,8 @@ void onkeypress(int k, wchar_t uc, bool shiftmod) {
     else if(k == 'X') { cutButton(getCurSubdot()); }
     else if(k == 'C') { copyButton(getCurSubdot()); }
     else if(k == 'V') { pasteButton(getCurSubdot()); }
-    else if(k == 'P') { playVariant(getCurVariant(), soundenv, stages[current_stage].bpm, !shiftmod); }
+    else if(k == 'B') { setRecSoundboard(getCurSubdot()); }
+    else if(k == 'P') { playVariant(getCurVariant(), stages[current_stage].bpm, !shiftmod); }
     else if(k == VK_TAB) {
         infocursor++;
         if(infocursor > 1) infocursor = 0;
@@ -999,7 +1006,7 @@ void drawinfo(int x, int y) {
     snwprintf(gbuf, 80, L"Stage: %d  %ls", current_stage + 1, stages[current_stage].name);
     conscr::writescol(x, y, gbuf, FOREGROUND_GRAY);
 
-    snwprintf(gbuf, 80, L"Record: %d", current_record);
+    snwprintf(gbuf, 80, L"Record: %d  SoundB: %d", current_record, currentrecord.soundboardid);
     conscr::writescol(x, y+1, gbuf, FOREGROUND_GRAY);
 
     snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);

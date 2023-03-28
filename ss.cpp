@@ -114,30 +114,33 @@ void soundenv_t::load(const e_soundboard_t &sb) {
 }
 
 void soundenv_t::play(int keyid) {
-    if(keyid >= this->keys.size() || keyid < 0) return;
-    u16 prog = this->keys[keyid].program;
-    u16 key = this->keys[keyid].key;
-    //u16 vol = this->keys[keyid].vol;
-    u16 lastkey = this->lastkey[prog];
-    u16 soundid = this->prog[prog][key];
+    try{ 
+        if(keyid >= this->keys.size() || keyid < 0) return;
+        u16 prog = this->keys[keyid].program;
+        u16 key = this->keys[keyid].key;
+        u16 lastkey = this->lastkey[prog];
+        u16 soundid = this->prog[prog][key];
 
-    if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
-    this->lastkey[prog] = key;
+        if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
+        this->lastkey[prog] = key;
 
-    this->sounds[soundid].sndbuf->SetCurrentPosition(0);
-    this->sounds[soundid].sndbuf->SetVolume(10000);
-    this->sounds[soundid].sndbuf->Play(0,0,0);
+        this->sounds[soundid].sndbuf->SetCurrentPosition(0);
+        this->sounds[soundid].sndbuf->SetVolume(10000);
+        this->sounds[soundid].sndbuf->Play(0,0,0);
+    } catch(...) {}
 }
 
 void soundenv_t::stopAll() {
-    for(int i = 0; i < this->sounds.size(); i++) {
-        u16 prog = this->keys[i].program;
-        u16 lastkey = this->lastkey[prog];
-        u16 key = this->keys[i].key;
-        
-        if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
-        this->lastkey[prog] = key;
-    }
+    try{
+        for(int i = 0; i < this->sounds.size(); i++) {
+            u16 prog = this->keys[i].program;
+            u16 lastkey = this->lastkey[prog];
+            u16 key = this->keys[i].key;
+            
+            if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
+            this->lastkey[prog] = key;
+        }
+    } catch(...) {}
 }
 
 void loadticker() {
