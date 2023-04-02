@@ -167,7 +167,7 @@ void playVariant(const e_suggestvariant_t &variant, double bpm, bool tick) {
     }
     std::sort(tokens.begin(), tokens.end(), tokenSorter);
 
-    double lineend = (spsd * variant.lines[variant.lines.size() - 1].timestamp_end);
+    double lineend = spsd * currentrecord.lengthinsubdots;
     int i = 0;
     double rtime = 0;
     double nexttick = 0.0;
