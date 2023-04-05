@@ -6,15 +6,16 @@ NeoBESMS is a modified version of ptr2besms, a tool for modifying lines on PaRap
 
 * Added support for NTSC-J and PAL
 * Loads pcsx2-parappa.exe without renaming
-* Playback of lines until the end & stop audio
-* SFX line now visible (used on stage 1 & 6)
+* Playback of lines until the end & immediate audio stop
+* SFX (Boxxy) line now visible (used on some stages)
 * Functional .OLM file injection
 * Shift+F9 for manual PCSX2 base address
 * Shift+P to play without ticks
-* X to cut buttons
+* X to cut buttons, B to pick a soundboard
 * Changes in Error/info/input messages
 * Additional info displayed in editor
-* Small changes to the code
+* Crash handling, tries to prevent loss of projects
+* Some attempts to refactor
 
 ## Todo
 

@@ -1,29 +1,28 @@
 #include "suggest.h"
 #include "pcsx2reader.h"
+#include "stageinfo.h"
 #include <vector>
 #include <memory.h>
 #include <Windows.h>
 
 u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<commandbuffer_t> *buffers, int oopslen, bool isPAL) {
-    u32 acc = 0;
-    acc += sizeof(suggestrecord_t) * records.size();
+    u32 size = sizeof(suggestrecord_t) * records.size();
 
-    for(int i = 0; i < records.size(); i += 1) {
+    for(int i = 0; i < records.size(); i++) {
         e_suggestrecord_t &record = records[i];
-        for(int k = 0; k < 17; k += 1) {
+        for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
-            if(variant.islinked == true) continue;
+            if(variant.islinked) continue;
             int linesize = (isPAL ? sizeof(suggestline_t_pal) : sizeof(suggestline_t));
-            acc += linesize * variant.lines.size();
+            size += linesize * variant.lines.size();
             for(int m = 0; m < variant.lines.size(); m++) {
-                e_suggestline_t &line = variant.lines[m];
-                acc += sizeof(suggestbutton_t) * line.buttons.size();
+                size += sizeof(suggestbutton_t) * variant.lines[m].buttons.size();
             }
         }
     }
 
-    for(int i = 0; i < 9; i += 1) acc += buffers[i].size() * 0x10;
-    return acc + oopslen;
+    for(int i = 0; i < 9; i++) size += buffers[i].size() * 0x10;
+    return size + oopslen;
 }
 
 #define UPLOAD_NOMOVE(y,x) UPLOAD_SIZE(y,x,sizeof(x))
@@ -39,7 +38,7 @@ u32 applymetafixup(u32 start, u32 fixup) {
 
     for(;;) {
         pcsx2reader::read(caddr, &ptrinmem, 4);
-        if(!(ptrinmem & 0x1000000)) {caddr += 4; continue;}
+        if(!(ptrinmem & 0x1000000)) { caddr += 4; continue; }
         if(oldaddr == 0) oldaddr = ptrinmem;
         if(ptrinmem != oldaddr) return caddr;
         UPLOAD_NOMOVE(caddr, fixup);
@@ -51,31 +50,28 @@ bool pcsx2upload(
     std::vector<e_suggestrecord_t> &records,
     std::vector<commandbuffer_t> *buffers,
     byte *oopsdat, int oopslen,
-    u32 datastart, u32 dataend,
-    u32 stagemodelistbase, bool isPAL, bool kSubs) {
-    u32 a = datastart;
+    currentstage_t currentstage,
+    bool isPAL, bool kSubs) {
+    u32 uploadPos = currentstage.buttondatabase;
     u32 ptr_oops_parap;
     u32 ptr_oops_teach;
     u32 mb[9];
     scenemode_t modes[9];
 
-    u32 count = dataend - datastart + 1;
-    if(pcsx2calcsize(records, buffers, oopslen, isPAL) > count) return false;
-    DOWNLOAD_SIZE(stagemodelistbase, modes[0], sizeof(modes));
+    DOWNLOAD_SIZE(currentstage.stagemodelistbase, modes[0], sizeof(modes));
     for(int i = 0; i < 9; i++) {
-        mb[i] = a;
+        mb[i] = uploadPos;
         modes[i].ptr_scenecommands = mb[i];
-        for(int k = 0; k < buffers[i].size(); k++) {UPLOAD(a, buffers[i][k]);}
+        for(int k = 0; k < buffers[i].size(); k++) {UPLOAD(uploadPos, buffers[i][k]);}
     }
-    UPLOAD_NOMOVE(stagemodelistbase, modes);
-    UPLOAD_SIZE(a, oopsdat[0], oopslen);
-    ptr_oops_teach = a;
+    UPLOAD_NOMOVE(currentstage.stagemodelistbase, modes);
+    UPLOAD_SIZE(uploadPos, oopsdat[0], oopslen);
+    ptr_oops_teach = uploadPos;
     ptr_oops_parap = ptr_oops_teach + (sizeof(suggestbutton_t) * 6);
-    a += oopslen;
+    uploadPos += oopslen;
     for(int i = 0; i < records.size(); i++) {
         e_suggestrecord_t &record = records[i];
         suggestrecord_t ps2record;
-        u32 linebase;
 
         for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
@@ -84,7 +80,7 @@ bool pcsx2upload(
 
             int nbuttons = 0;
             for(e_suggestline_t &line : variant.lines) nbuttons += line.buttons.size();
-            u32 buttonbase = a;
+            u32 buttonbase = uploadPos;
             u32 linebase = buttonbase + (nbuttons * sizeof(suggestbutton_t));
 
             ps2variant.numlines = variant.lines.size();
@@ -114,7 +110,7 @@ bool pcsx2upload(
                     for(int n = 0; n < line.buttons.size(); n++) {UPLOAD(buttonbase, line.buttons[n]);}
                     ps2lineP.always_zero = 0;
                     ps2lineP.coolmodethreshold = line.coolmodethreshold;
-                    for(int t = 0; t < 7; t++) {ps2lineP.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);} // u32(~0)
+                    for(int t = 0; t < 7; t++) {ps2lineP.localisations[t] = (kSubs) ? line.localisations[t] : u32(~0);}
                     ps2lineP.owner = line.owner;
                     ps2lineP.timestamp_start = line.timestamp_start;
                     ps2lineP.timestamp_end = line.timestamp_end;
@@ -123,7 +119,7 @@ bool pcsx2upload(
                     UPLOAD(linebase, ps2lineP);
                 }
             }
-            a = linebase; /* linebase is actually after all lines */
+            uploadPos = linebase; /* linebase is actually after all lines */
         }
         for(int k = 0; k < 17; k++) {
             e_suggestvariant_t &variant = record.variants[k];
@@ -139,11 +135,11 @@ bool pcsx2upload(
         memcpy(ps2record.unk, record.unk, sizeof(ps2record.unk));
 
         if(record.type == 1) {
-            for(int k = 1; k < 4; k += 1) mb[k] = applymetafixup(mb[k], a);
+            for(int k = 1; k < 4; k++) mb[k] = applymetafixup(mb[k], uploadPos);
         } else {
-            mb[record.type] = applymetafixup(mb[record.type], a);
+            mb[record.type] = applymetafixup(mb[record.type], uploadPos);
         }
-        UPLOAD(a, ps2record);
+        UPLOAD(uploadPos, ps2record);
     }
 
     return true;

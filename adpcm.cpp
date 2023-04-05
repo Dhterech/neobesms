@@ -18,7 +18,6 @@ int decode_hist2 = 0;
 
 void decode_psx(uint8_t *buf, int16_t *outbuf, int channelspacing, int32_t first_sample, int32_t samples_to_do) {
 	int predict_nr, shift_factor, sample;
-	int i;
 	short scale;
 	int32_t sample_count;
 	uint8_t flag;
@@ -31,14 +30,14 @@ void decode_psx(uint8_t *buf, int16_t *outbuf, int channelspacing, int32_t first
 
 	first_sample = first_sample % 28;
 
-	for(i=first_sample,sample_count=0; i<first_sample+samples_to_do; i++,sample_count+=channelspacing) {
-		sample=0;
+	for(int i = first_sample, sample_count = 0; i < first_sample + samples_to_do; i++, sample_count += channelspacing) {
+		sample = 0;
 
-		if(flag<0x7) {
+		if(flag < 0x7) {
 			short sample_byte = (short)(buf[(framesin*16)+2+(i/2)]);
 			scale = ((i&1 ? (sample_byte >> 4) : (sample_byte & 0xf)) << 12);
 
-			sample = (int)((scale >> shift_factor)+decode_hist1*VAG_f[predict_nr][0]+decode_hist2*VAG_f[predict_nr][1]);
+			sample = (int)((scale >> shift_factor) + decode_hist1 * VAG_f[predict_nr][0] + decode_hist2 * VAG_f[predict_nr][1]);
 		}
 
 		outbuf[sample_count] = clamp16(sample);

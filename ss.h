@@ -21,12 +21,10 @@ struct ptrkey_t {
     u16 key;
     u16 vol;
 };
-/* TODO: Hack to work around pthread key_t name conflict apparently */
-#define key_t ptrkey_t
 
 struct e_soundboard_t {
     std::vector<e_sound_t> sounds;
-    std::vector<key_t> keys;
+    std::vector<ptrkey_t> keys;
     std::array<std::array<u8, 128>, 128> prog;
     struct {
         u32 len = 0;
@@ -37,7 +35,7 @@ struct e_soundboard_t {
 };
 
 struct sound_t {
-    IDirectSoundBuffer8 *sndbuf = NULL;
+    IDirectSoundBuffer *sndbuf = NULL;
     ~sound_t();
     void clear();
     void load(const e_soundboard_t &sb, const e_sound_t &snd);
@@ -46,7 +44,7 @@ struct sound_t {
 struct soundenv_t {
     u32 soundboardid;
     std::vector<sound_t> sounds;
-    std::vector<key_t> keys;
+    std::vector<ptrkey_t> keys;
     std::array<std::array<u8, 128>, 128> prog;
     std::array<u16, 128> lastkey;
     void clear();

@@ -248,8 +248,7 @@ int pcsx2ReadRecords(u32 stagecmd_start, int count, u32 type, std::vector<e_sugg
     u32 raddr;
     int nrecords = 0;
 
-    int i = 0;
-    while(i < count) {
+    for(int i = 0; i < count; i++, caddr += 0x10) {
         u16 cmd;
         pcsx2reader::read(caddr, &cmd, 2);
 
@@ -277,9 +276,6 @@ int pcsx2ReadRecords(u32 stagecmd_start, int count, u32 type, std::vector<e_sugg
                 }
             }
         }
-
-        i++;
-        caddr += 0x10;
     }
 	return records.size();
 }

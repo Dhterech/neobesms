@@ -4,6 +4,7 @@
 #include "ss.h"
 #include "types.h"
 #include "suggest.h"
+#include "stageinfo.h"
 
 #define HD_SIGNATURE 0x53434549
 
@@ -50,8 +51,7 @@ bool pcsx2upload(
     std::vector<e_suggestrecord_t> &records,
     std::vector<commandbuffer_t> *commands,
     byte *oopsdat, int oopslen,
-    u32 datastart, u32 dataend,
-    u32 stagemodelistbase, bool isPAL, bool kSubs);
+    currentstage_t currentstage, bool isPAL, bool kSubs);
 bool olmupload(wchar_t *filename);
 
 #endif // BES_PCSX2UTIL_H
