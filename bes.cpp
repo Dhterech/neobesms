@@ -999,9 +999,6 @@ void drawinfo(int x, int y) {
         conscr::writescol(x, y+3, gbuf, FOREGROUND_WHITE);
     } else conscr::writescol(x, y+3, L"Not linked", FOREGROUND_INTENSITY);
 
-    swprintf(gbuf, 80, L"RecAddr %d", records[current_record].address); // REMOVE LATER
-    conscr::writescol(x, y+4, gbuf, FOREGROUND_GRAY);
-
     u32 totalsize = pcsx2calcsize(records, commands, oopslen, modelen, (curReg == 1));
     u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
 
