@@ -8,14 +8,16 @@
 #include <stdio.h>
 #include <algorithm>
 #include <array>
+#include <fstream>
 
 #include "config.h"
 
-#define snwprintf swprintf
-
 std::vector<e_suggestrecord_t> records;
-std::vector<commandbuffer_t> commands[9];
+std::vector<std::vector<commandbuffer_t>> commands;
+std::vector<scenemode_t> modes;
 
+bool isVSMode;
+uint32_t modelen = 9;
 int oopslen = 0;
 byte *oopsdat = nullptr;
 
@@ -23,6 +25,7 @@ std::vector<e_soundboard_t> soundboards;
 soundenv_t soundenv;
 suggestbutton_t button_clipboard;
 currentstage_t currentstage;
+std::fstream rawFile;
 
 #define currentrecord records[current_record]
 
@@ -66,9 +69,9 @@ bool neosubtitles = DEFAULT_SUBS;
 wchar_t gbuf[80];
 int lastsbload = -1;
 
-const wchar_t *regions[] = { L"NTSC", L"PAL", L"NTSC-J" };
+const wchar_t *uiRegions[] = { L"NTSC-U", L"PAL", L"NTSC-J" };
 
-const wchar_t *difficulties[] = {
+const wchar_t *uiVariations[] = {
     L"Orange Hat", 
     L"Lowest",
     L"Awful",
@@ -88,15 +91,46 @@ const wchar_t *difficulties[] = {
     L"Highest",
 };
 
+#define FOREGROUND_GRAY (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED)
+#define FOREGROUND_WHITE (FOREGROUND_GRAY | FOREGROUND_INTENSITY)
+#define FG_AQUA (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define FG_GREEN (FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define FG_PINK (FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY)
+#define FG_RED (FOREGROUND_RED | FOREGROUND_INTENSITY)
+#define FG_YELLOW (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define FG_BLUE (FOREGROUND_BLUE | FOREGROUND_INTENSITY)
+
+wchar_t uiButtonChars[] = {
+    '?',
+    'T',
+    'O',
+    'X',
+    'S',
+    'L',
+    'R',
+    'H'
+};
+
+WORD uiButtonColors[] = {
+    FOREGROUND_GRAY,
+    FG_GREEN,
+    FG_RED,
+    FG_AQUA,
+    FG_PINK,
+    FG_YELLOW,
+    FG_BLUE,
+    FG_YELLOW
+};
+
 void loadSoundboard(int id) {
-    if(lastsbload == id) return;
+    if(lastsbload == id || id >= soundboards.size()) return;
     soundenv.load(id == -1 ? soundboards[soundboards.size() - 1] : soundboards[id]);
     lastsbload = id;
 }
 
 double getTime() {
     LARGE_INTEGER freq;
-    LARGE_INTEGER current;
+    LARGE_INTEGER current;                                                                     
 
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&current);
@@ -193,8 +227,16 @@ void importStageInfo() {
     currentstage.bpm = stages[current_stage].bpm;
     currentstage.stagemodelistbase = stages[current_stage].regions[tmpReg].stagemodelistbase;
     currentstage.keytablebase = stages[current_stage].regions[tmpReg].keytablebase;
-    currentstage.buttondatabase = currentstage.keytablebase + 0x120;
+    currentstage.buttondatabase = currentstage.keytablebase + stages[current_stage].regions[tmpReg].keytablesize;
     currentstage.buttondataend = currentstage.stagemodelistbase - 1;
+    // Versus Mode Compatibility
+    isVSMode = current_stage > 9;
+    numowners = (isVSMode) ? 1 : 3;
+    oopslen = ((isVSMode) ? 3 : 2) * 6 * sizeof(suggestbutton_t);
+    // Modelist Size
+    modelen = isVSMode ? 9 : 9; // FIXME: VS Wrong number, black screen
+    if(current_stage == 7 || current_stage == 6) modelen = 27; // Stage 8 & 7 Extra data
+    if(current_stage == 5) modelen = 24; // Stage 6 Extra data
 }
 
 void waitKey() {
@@ -221,7 +263,8 @@ int importFromEmulator() {
     logInfo(L" Status: Reading current stage...");
 	
     pcsx2reader::read(CURRENT_STAGE[curReg], &current_stage, 1); current_stage--;
-    if(current_stage > 9) { logWarn(L" Error: Versus mode not supported!"); return 2; }
+    records.clear();
+
     logInfo(L" Status: Getting stage info & sound database...");
     importStageInfo();
     u32 hdlistbase = findhdbase(RESOURCE_LIST_BASE[curReg]);
@@ -229,46 +272,17 @@ int importFromEmulator() {
     int numhd = getnumhd(hdlistbase);
 
     logInfo(L" Status: Reading game lines...");
-    records.clear();
     try {
-        pcsx2GetRecFromModelist(currentstage.stagemodelistbase, records, (curReg == 1));
-        pcsx2GetComBuffers(currentstage.stagemodelistbase, commands);
+        pcxs2GetModelist(currentstage.stagemodelistbase, modelen, modes);
+        pcsx2GetComBuffers(modes, commands);
+        pcsx2ParseComRecords(records, commands, isVSMode);
         pcsx2GetSoundboards(hdlistbase, bdlistbase, numhd, soundboards);
         pcsx2GetKeytables(currentstage.keytablebase, numhd, 0, soundboards);
     } catch(...) { return 2; }
     return 0;
 }
 
-#define FOREGROUND_GRAY (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED)
-#define FOREGROUND_WHITE (FOREGROUND_GRAY | FOREGROUND_INTENSITY)
-#define FG_AQUA (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
-#define FG_GREEN (FOREGROUND_GREEN | FOREGROUND_INTENSITY)
-#define FG_PINK (FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY)
-#define FG_RED (FOREGROUND_RED | FOREGROUND_INTENSITY)
-#define FG_YELLOW (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
-#define FG_BLUE (FOREGROUND_BLUE | FOREGROUND_INTENSITY)
-
-wchar_t buttonidtowchar[] = {
-    '?',
-    'T',
-    'O',
-    'X',
-    'S',
-    'L',
-    'R',
-};
-
-WORD buttonidtocol[] = {
-    FOREGROUND_GRAY,
-    FG_GREEN,
-    FG_RED,
-    FG_AQUA,
-    FG_PINK,
-    FG_YELLOW,
-    FG_BLUE
-};
-
-void drawButton(int x, int y, int buttonid) { conscr::putchcol(x, y, buttonidtowchar[buttonid], buttonidtocol[buttonid]); }
+void drawButton(int x, int y, int buttonid) { conscr::putchcol(x, y, uiButtonChars[buttonid], uiButtonColors[buttonid]); }
 void drawCursor(int x, int y) { conscr::putchcol(x, y, L'^', FOREGROUND_GRAY); }
 
 bool isDotOwned(int dot, int owner, e_suggestvariant_t &variant) {
@@ -407,7 +421,7 @@ void createLine(u32 subdot_start, u32 subdot_end) {
     newline.timestamp_end = subdot_end;
     newline.coolmodethreshold = (newline.owner == owners[2] ? -1 : 150);
     for(int i = 0; i < subcount; i++) newline.localisations[i] = NULL;
-    newline.always_zero = 0;
+    newline.vs_count = 0;
 
     variant.lines.push_back(newline);
     std::sort(variant.lines.begin(), variant.lines.end(), lineSorter);
@@ -426,6 +440,7 @@ void createButton(u32 subdot, int owner, int buttonid) {
         e.always_zero = 0;
         e.soundid = ~0;
         e.animationid = ~0;
+        e.unk = ~0;
         e.relativetime = ~0;
     }
 
@@ -477,7 +492,7 @@ void changeButParameter(int amount, bool setMode) {
     }
 }
 
-void setRecSoundboard(u32 subdot) {
+void setRecSoundboard() {
     int sbid = conscr::query_decimal(L" Input: Enter a new soundboard number: ");
     if(sbid > soundboards.size() - 1 || sbid < 0) { logWarn(L" Error: Soundboard number too high/low"); return;}
     currentrecord.soundboardid = sbid;
@@ -524,7 +539,7 @@ void setInfoLineCool(int amount) {
 
 void setInfoRecordLink(int linkid) {
     if(linkid >= 17) {
-        snwprintf(gbuf, 80, L" Error: Link identifier too high (%d)", linkid);
+        swprintf(gbuf, 80, L" Error: Link identifier too high (%d)", linkid);
         logWarn(gbuf);
         return;
     } else if(linkid == current_variant || linkid < 0) {
@@ -550,6 +565,13 @@ void adjustInfo() {
     case 1:
         setInfoLineCool(conscr::query_decimal(L" Input: Type new threshold: "));
         break;
+    }
+}
+
+void linkEverything() {
+    for(int i = 1; i < 17; i++) {
+        currentrecord.variants[i].islinked = true;
+        currentrecord.variants[i].linknum = 0;
     }
 }
 
@@ -641,7 +663,7 @@ void onEditorKey(int k, wchar_t uc, bool shiftmod) {
     else if(k == 'X') { cutButton(getCurSubdot()); }
     else if(k == 'C') { copyButton(getCurSubdot()); }
     else if(k == 'V') { pasteButton(getCurSubdot()); }
-    else if(k == 'B') { setRecSoundboard(getCurSubdot()); }
+    else if(k == 'B') { setRecSoundboard(); }
     else if(k == 'P') { playVariant(getCurVariant(), stages[current_stage].bpm, !shiftmod); }
     else if(k == VK_TAB) {
         infocursor++;
@@ -650,56 +672,47 @@ void onEditorKey(int k, wchar_t uc, bool shiftmod) {
     else if(uc == '`' || uc == '~') { adjustInfo(); }
     else if(k == VK_RETURN) { changeButParameter(0, true); }
     else if(k == VK_ESCAPE) { menu_options = true; }
+    else if(k == VK_F8) {
+        linkEverything();
+    }
     else if(k == VK_F5) {
         importStageInfo();
-        u32 totalsize = pcsx2calcsize(records, commands, oopslen, (curReg == 1));
+        u32 totalsize = pcsx2calcsize(records, commands, oopslen, modelen, (curReg == 1));
         u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
         if(totalsize > origsize) { logWarn(L" Error: Data too large! Link some lines to spare space."); return; }
         logInfo(L" Status: Uploading to PCSX2...");
-        bool result = pcsx2upload(records, commands, oopsdat, oopslen, currentstage, (curReg == 1), neosubtitles);
+        if(modes.size() == 0) pcxs2GetModelist(currentstage.stagemodelistbase, modelen, modes);
+        bool result = pcsx2upload(records, commands, modes, oopsdat, oopslen, modelen, currentstage, (curReg == 1), neosubtitles, isVSMode);
         if(result) logWarn(L" Info: Current lines are injected in PCSX2.");
         else logWarn(L" Error: There was an error injecting in PCSX2.");
     }
 }
 
+u32 tmpu32;
+i32 tmpi32;
+
+#define WRITE(x) rawFile.write(reinterpret_cast<char *>(&x), sizeof(x));
+void saveScene(std::vector<commandbuffer_t> &buffer) {
+    tmpu32 = buffer.size(); WRITE(tmpu32);
+    for(commandbuffer_t &cmd : buffer) { WRITE(cmd); }
+}
 int saveProject(wchar_t *name) {
-    HANDLE hfile = CreateFileW(
-        LPCWSTR(name),
-        GENERIC_WRITE,
-        0,
-        NULL,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL
-    );
+    rawFile.open(name, std::ios_base::out | std::ios_base::binary);
+    if(!rawFile.is_open()) return GetLastError();
 
-    if(hfile == INVALID_HANDLE_VALUE) return GetLastError();
+    WRITE(current_stage);
+    for(int i = 0; i < 9; i++) saveScene(commands[i]);
 
-    DWORD written;
-    #define WRITE(x) WriteFile(hfile, LPCVOID(&(x)), sizeof(x), &written, NULL)
-
-    u32 tmpu32;
-    i32 tmpi32;
-    tmpu32 = u32(current_stage); WRITE(tmpu32);
-    for(int i = 0; i < 9; i++) {
-        std::vector<commandbuffer_t> &buffer = commands[i];
-        tmpu32 = u32(buffer.size()); WRITE(tmpu32);
-        for(int k = 0; k < buffer.size(); k++) WRITE(buffer[k].data);
-    }
     tmpu32 = records.size(); WRITE(tmpu32);
-    for(int i = 0; i < records.size(); i++) {
-        e_suggestrecord_t &record = records[i];
-		
+    for(e_suggestrecord_t &record : records) {
         WRITE(record.type);
         WRITE(record.lengthinsubdots);
         WRITE(record.soundboardid);
-        for(int k = 0; k < 17; k++) {
-            e_suggestvariant_t &variant = record.variants[k];
-            tmpi32 = variant.islinked ? i32(variant.linknum) : -1; WRITE(tmpi32);
+        for(e_suggestvariant_t &variant : record.variants) {
+            tmpi32 = variant.islinked ? variant.linknum : -1; WRITE(tmpi32);
             tmpu32 = variant.lines.size(); WRITE(tmpu32);
-            for(int m = 0; m < variant.lines.size(); m++) {
-                e_suggestline_t &line = variant.lines[m];
-                WRITE(line.always_zero);
+            for(e_suggestline_t &line : variant.lines) {
+                WRITE(line.vs_count);
                 WRITE(line.coolmodethreshold);
 				if(neosubtitles) {for(int susb = 0; susb < subcount; susb++) {
 					WRITE(line.localisations[susb]);
@@ -707,77 +720,72 @@ int saveProject(wchar_t *name) {
                 WRITE(line.owner);
                 WRITE(line.timestamp_start);
                 WRITE(line.timestamp_end);
-                WRITE(line.unk1);
-                WRITE(line.unk2);
-
-                tmpu32 = line.buttons.size(); WRITE(tmpu32);
-                for(int n = 0; n < line.buttons.size(); n++) WRITE(line.buttons[n]);
+                WRITE(line.oopscount);
+                WRITE(line.ptr_oops);
+                
+                tmpu32 = line.buttons.size();
+                WRITE(tmpu32);
+                for(suggestbutton_t &button : line.buttons) WRITE(button);
             }
         }
+        if(isVSMode) WRITE(record.vs_data);
     }
 
     tmpu32 = soundboards.size(); WRITE(tmpu32);
-    for(int i = 0; i < soundboards.size(); i++) {
-        e_soundboard_t &sb = soundboards[i];
+    for(e_soundboard_t &sb : soundboards) {
         WRITE(sb.bd.len);
-        WriteFile(hfile, LPCVOID(sb.bd.bytes), sb.bd.len, &written, NULL);
+        rawFile.write(reinterpret_cast<char *>(sb.bd.bytes), sb.bd.len);
 
         tmpu32 = sb.keys.size(); WRITE(tmpu32);
-        for(int k = 0; k < sb.keys.size(); k++) WRITE(sb.keys[k]);
+        for(ptrkey_t &key : sb.keys) WRITE(key);
         WRITE(sb.prog);
         tmpu32 = sb.sounds.size(); WRITE(tmpu32);
-        for(int k = 0; k < sb.sounds.size(); k++) WRITE(sb.sounds[k]);
+        for(e_sound_t &sound : sb.sounds) WRITE(sound);
     }
-    #undef WRITE
-    CloseHandle(hfile);
+
+    if(modelen > 9) { // NeoBesms Extra Data
+        WRITE(modelen);
+        for(int i = 9; i < modelen; i++) saveScene(commands[i]); // Stage 8 / VS
+    }
+    
+    rawFile.close();
     return 0;
+}
+#undef WRITE
+
+#define READ(x) rawFile.read(reinterpret_cast<char *>(&x), sizeof(x));
+void loadScene() {
+    std::vector<commandbuffer_t> buffer;
+    READ(tmpu32); buffer.resize(tmpu32);
+    for(commandbuffer_t &cmd : buffer) READ(cmd);
+    commands.push_back(buffer);
 }
 
 int loadProject(wchar_t *name) {
-    HANDLE hfile = CreateFileW(
-        LPCWSTR(name),
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL
-    );
+    rawFile.open(name, std::ios_base::in | std::ios_base::binary);
+    if(!rawFile.is_open()) return GetLastError();
 
-    if(hfile == INVALID_HANDLE_VALUE) return GetLastError();
-
-    DWORD readin;
+    commands.clear();
     records.clear();
     soundboards.clear();
-
-    #define READ(x) ReadFile(hfile, LPVOID(&(x)), sizeof(x), &readin, NULL)
-    u32 tmpu32;
-    i32 tmpi32;
 	
-    READ(tmpu32); current_stage = int(tmpu32);
+    READ(tmpu32); current_stage = tmpu32;
     importStageInfo();
 
-    for(int i = 0; i < 9; i++) {
-        std::vector<commandbuffer_t> &buffer = commands[i];
-        READ(tmpu32); buffer.resize(tmpu32);
-        for(int k = 0; k < buffer.size(); k++) READ(buffer[k].data);
-    }
+    for(int i = 0; i < 9; i++) loadScene();
 
     READ(tmpu32); records.resize(tmpu32);
-    for(int i = 0; i < records.size(); i++) {
-        e_suggestrecord_t &record = records[i];
+    for(e_suggestrecord_t &record : records) {
         READ(record.type);
         READ(record.lengthinsubdots);
         READ(record.soundboardid);
-        for(int k = 0; k < 17; k++) {
-            e_suggestvariant_t &variant = record.variants[k];
+        for(e_suggestvariant_t &variant : record.variants) {
             READ(tmpi32); variant.islinked = bool(tmpi32 >= 0);
             variant.linknum = tmpi32;
 
             READ(tmpu32); variant.lines.resize(tmpu32);
-            for(int m = 0; m < variant.lines.size(); m++) {
-                e_suggestline_t &line = variant.lines[m];
-                READ(line.always_zero);
+            for(e_suggestline_t &line : variant.lines) {
+                READ(line.vs_count);
                 READ(line.coolmodethreshold);
 				if(neosubtitles) {for(int susb = 0; susb < subcount; susb++) {
 					READ(line.localisations[susb]);
@@ -785,20 +793,21 @@ int loadProject(wchar_t *name) {
                 READ(line.owner);
                 READ(line.timestamp_start);
                 READ(line.timestamp_end);
-                READ(line.unk1);
-                READ(line.unk2);
+                READ(line.oopscount);
+                READ(line.ptr_oops);
                 READ(tmpu32);
                 line.buttons.resize(tmpu32);
-                for(int n = 0; n < line.buttons.size(); n++) READ(line.buttons[n]);
+                for(suggestbutton_t &button : line.buttons) READ(button);
             }
         }
+        if(isVSMode) READ(record.vs_data);
     }
 
     READ(tmpu32); soundboards.resize(tmpu32);
-    for(int i = 0; i < soundboards.size(); i++) {
-        e_soundboard_t &sb = soundboards[i];
-        READ(sb.bd.len); sb.bd.bytes = (byte*)(malloc(sb.bd.len));
-        ReadFile(hfile, LPVOID(sb.bd.bytes), sb.bd.len, &readin, NULL);
+    for(e_soundboard_t &sb : soundboards) {
+        READ(sb.bd.len);
+        sb.bd.bytes = (byte *)malloc(sb.bd.len);
+        rawFile.read(reinterpret_cast<char*>(sb.bd.bytes), sb.bd.len);
 		
         READ(tmpu32); sb.keys.resize(tmpu32);
         for(int k = 0; k < sb.keys.size(); k++) READ(sb.keys[k]);
@@ -806,37 +815,42 @@ int loadProject(wchar_t *name) {
         READ(sb.prog);
         READ(tmpu32); sb.sounds.resize(tmpu32);
         for(int k = 0; k < sb.sounds.size(); k++) READ(sb.sounds[k]);
+    };
+
+    if(rawFile.tellg() != EOF) { // NeoBesms Extra data
+        READ(tmpu32); modelen = tmpu32;
+        if(modelen > 9) { // Extra scenes
+            for(int i = 9; i < modelen; i++) loadScene(); // Not loading this fixes the issue
+        }
+    } else {
+        modelen = 9;
     }
-    #undef READ
-    CloseHandle(hfile);
+
+    rawFile.close();
+
+    getProjectRecordAddresses(records, commands, isVSMode);
     return 0;
 }
+#undef READ
 
 // menu
-
-const wchar_t *optionlines[] = {
-	L"NeoBESMS 05/04/2023",
-    L"",
-	L"",
-    L"[F01] Save Project",
-    L"[F03] Load Project",
-    L"",
-    L"[F05] Upload .OLM File",
-    L"[F09] Download From PCSX2",
-	L"[F10] Toggle game region",
-    L"",
-    L""
-};
 
 void drawOptions() {
     conscr::clearchars(L' ');
     conscr::clearcol(FOREGROUND_GRAY);
     
-    optionlines[1] = regions[curReg];
-    optionlines[10] = (records.size() == 0 ? L"" : L"[ESC] Return to editor");
+    conscr::writes(1, 1, L"NeoBESMS 23/09/2023");
+    conscr::writes(1, 2, uiRegions[curReg]);
 
-	int menusize = sizeof(optionlines) / sizeof(optionlines[0]);
-    for(int i = 0; i < menusize; i++) conscr::writes(1, i + 1, optionlines[i]);
+    conscr::writes(1, 4, L"[F01] Save project");
+    conscr::writes(1, 5, L"[F03] Load project");
+
+    conscr::writes(1, 7, L"[F05] Upload OLM file");
+    //conscr::writes(1, 8, (neosubtitles == false ? L"[F06] Toggle subtitles [Disabled]" : L"[F06] Toggle subtitles [Enabled]"));
+    conscr::writes(1, 8, L"[F10] Toggle game region");
+    conscr::writes(1, 9, L"[F09] Download from PCSX2");
+    if(records.size() != 0) conscr::writes(1, 11, L"[ESC] Return to editor");
+
     conscr::refresh();
 }
 
@@ -848,26 +862,25 @@ void onOptionsKey(int k, bool shiftmod) {
         int result = importFromEmulator();
         if(result == 0) menu_options = false;
         else if(result == 1) logWarn(L" Error: PCSX2 process not found!");
-        else if(result == 2) logWarn(L" Error: Cannot load data correctly. Wrong region maybe?");
+        else logWarn(L" Error: Cannot load data correctly. Wrong region maybe?");
     } else if(k == VK_F1) {
         if(records.size() == 0) { logWarn(L" Error: There is nothing loaded to save"); return; }
         if(!conscr::query_string(L" Input: Save as: ", filename, MAX_PATH)) return;
         int result = saveProject(filename);
-        if(result == 0) { snwprintf(gbuf, 80, L" Info: Saved as %ls", filename); logWarn(gbuf); }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %d", filename, result); logWarn(gbuf); }
+        if(result == 0) { swprintf(gbuf, 80, L" Info: Saved as %ls", filename); logWarn(gbuf); }
+		else { swprintf(gbuf, 80, L" Error: Couldn't save %ls, Error: %hs", filename, strerror(result)); logWarn(gbuf); }
     } else if(k == VK_F3) {
         current_record = 0; current_variant = 0; lastsbload = -1;
         if(!conscr::query_string(L" Input: Load Path: ", filename, MAX_PATH)) return;
         int result = loadProject(filename);
         if(result == 0) { menu_options = false; }
-		else { snwprintf(gbuf, 80, L" Error: Couldn't open %ls, Error: %d. Please check if file exists", filename, result); logWarn(gbuf); }
-    }
-    //case VK_F6: neosubtitles = !neosubtitles; break;
+		else { swprintf(gbuf, 80, L" Error: Couldn't open %ls, Error: %hs", filename, strerror(result)); logWarn(gbuf); }
+    } //else if(k == VK_F6) { neosubtitles = !neosubtitles; }
     else if(k == VK_F5) {
         if(conscr::query_string(L" Input: OLM File Path: ", filename, MAX_PATH) == 0) return;
         importStageInfo();
-        if(olmupload(filename)) { snwprintf(gbuf, 80, L" Info: Uploaded OLM file: %ls", filename); logWarn(gbuf); }
-        else { snwprintf(gbuf, 80, L" Error: Failed to upload OLM file: %ls", filename); logWarn(gbuf); }
+        if(olmupload(filename)) { swprintf(gbuf, 80, L" Info: Uploaded OLM file: %ls", filename); logWarn(gbuf); }
+        else { swprintf(gbuf, 80, L" Error: Failed to upload OLM file: %ls", filename); logWarn(gbuf); }
 	} else if(k == VK_F10) {
 		curReg++;
         if(curReg > 2) curReg = 0;
@@ -922,17 +935,16 @@ const wchar_t *ownernames[] = {
     L"???",
     L"Teacher",
     L"PaRappa",
-    L"SFX"
+    L"SFX",
+    L"Scene"
 };
 
 void drawownername(int x, int y, int ownerid) {
     int cid = 0;
     u32 tmp = u32(ownerid);
-    if(ownerid != 0) {
-        cid++;
-        while(tmp != 1) { tmp >>= 1; cid++; }
-    }
-    if(cid >= 5) { snwprintf(gbuf, 80, L"%x", ownerid); conscr::writes(x,y,gbuf); }
+    while(tmp != 0) { tmp >>= 1; cid++; }
+
+    if(cid >= 6 || cid < 0) { swprintf(gbuf, 80, L"%x", ownerid); conscr::writes(x,y,gbuf); }
     else conscr::writes(x,y,ownernames[cid]);
 }
 
@@ -952,11 +964,11 @@ void drawrecord(e_suggestrecord_t &record, e_suggestvariant_t &variant) {
 }
 
 void drawbuttonparameters(int x, int y, suggestbutton_t &button) {
-    conscr::putchcol(x + (paramcursorx != 0 ? paramcursorx * 18 / 2 : 4) + 1, y, L'v', FOREGROUND_GRAY);
-    conscr::writescol(x + 5, y + 1, L"SND  ANIM     TIME", FOREGROUND_GRAY);
+    conscr::putchcol(x + (paramcursorx * 5) + 5, y, L'v', FOREGROUND_GRAY);
+    conscr::writescol(x + 5, y + 1, L"SND  ANIM TIME", FOREGROUND_GRAY);
     for(int i = 0; i < 4; i++) {
         soundentry_t &se = button.sounds[i];
-        snwprintf(gbuf, 80, L"[%d] %04x %08x %04d", i, se.soundid, se.animationid, se.relativetime);
+        swprintf(gbuf, 80, L"[%d] %04x %04x %04d", i, se.soundid, se.animationid, se.relativetime);
         if(paramcursory == i) conscr::putchcol(x, y + (i * 2) + 2, L'>', FOREGROUND_GRAY);
         conscr::writescol(x + 1, y + (i * 2) + 2, gbuf, (se.soundid != 0xFFFF) ? FOREGROUND_GRAY : FOREGROUND_INTENSITY);
     }
@@ -966,33 +978,36 @@ void drawlineparameters(int x, int y) {
     e_suggestline_t *line;
     if(!getLineRefFromSubdot(getCurVariant(), getCurOwner(), getCurSubdot(), &line)) return;
 
-    snwprintf(gbuf, 80, L"COOL: %d", line->coolmodethreshold);
+    swprintf(gbuf, 80, L"COOL: %d", line->coolmodethreshold);
     conscr::writescol(x + 1, y, gbuf, FOREGROUND_GRAY);
     if(infocursor == 1) conscr::putchcol(x - 1, y, L'>', FOREGROUND_GRAY);
 }
 
 void drawinfo(int x, int y) {
-    snwprintf(gbuf, 80, L"Stage: %d  %ls", current_stage + 1, stages[current_stage].name);
+    swprintf(gbuf, 80, L"Stage: %d  %ls", current_stage + 1, stages[current_stage].name);
     conscr::writescol(x, y, gbuf, FOREGROUND_GRAY);
 
-    snwprintf(gbuf, 80, L"Record: %d  SoundB: %d", current_record, currentrecord.soundboardid);
+    swprintf(gbuf, 80, L"Record: %d (%d) SoundB: %d", current_record, records[current_record].type, currentrecord.soundboardid);
     conscr::writescol(x, y+1, gbuf, FOREGROUND_GRAY);
 
-    snwprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, difficulties[current_variant]);
+    swprintf(gbuf, 80, L"Variant: %d  %ls", current_variant, uiVariations[current_variant]);
     conscr::writescol(x, y+2, gbuf, FOREGROUND_GRAY);
 
     if(infocursor == 0) conscr::putchcol(x-2,y+3,L'>', FOREGROUND_GRAY);
     if(currentrecord.variants[current_variant].islinked) {
-        snwprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
+        swprintf(gbuf, 80, L"Linked: Variant %d", currentrecord.variants[current_variant].linknum);
         conscr::writescol(x, y+3, gbuf, FOREGROUND_WHITE);
     } else conscr::writescol(x, y+3, L"Not linked", FOREGROUND_INTENSITY);
 
-    u32 totalsize = pcsx2calcsize(records, commands, oopslen, (curReg == 1));
+    swprintf(gbuf, 80, L"RecAddr %d", records[current_record].address); // REMOVE LATER
+    conscr::writescol(x, y+4, gbuf, FOREGROUND_GRAY);
+
+    u32 totalsize = pcsx2calcsize(records, commands, oopslen, modelen, (curReg == 1));
     u32 origsize = currentstage.buttondataend - currentstage.buttondatabase + 1;
 
     WORD attr = (totalsize > origsize) ? (FG_RED) : (FG_GREEN);
 
-    snwprintf(gbuf, 80, L"%d / %d bytes", totalsize, origsize);
+    swprintf(gbuf, 80, L"%d / %d bytes", totalsize, origsize);
     conscr::writescol(x, y+5, gbuf, attr);
 }
 
@@ -1013,8 +1028,8 @@ void drawEditor() {
 }
 
 void sandbox() {
+    INPUT_RECORD ir;
     for(;;) {
-        INPUT_RECORD ir;
         SwitchToThread();
 		while(conscr::hasinput() && conscr::read(ir)) {
 			if(ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {
@@ -1024,32 +1039,6 @@ void sandbox() {
 			if(menu_options) { drawOptions(); } else { drawEditor(); }
 		}
     }
-}
-
-bool loadoops() {
-    HANDLE hfile = CreateFileW(
-        L"oops.dat",
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        0
-    );
-
-    if(hfile == INVALID_HANDLE_VALUE) return false;
-
-    LARGE_INTEGER filesize;
-    GetFileSizeEx(hfile, &filesize);
-
-    oopslen = int(filesize.LowPart);
-    oopsdat = new byte[oopslen];
-
-    DWORD readn;
-    ReadFile(hfile, LPVOID(oopsdat), DWORD(oopslen), &readn, NULL);
-
-    CloseHandle(hfile);
-    return true;
 }
 
 void initconsole() {
@@ -1062,8 +1051,8 @@ void initconsole() {
 int main() {
     initconsole();
     initsound(GetConsoleWindow());
-    loadoops();
     loadticker();
+    sandbox();
     try { sandbox(); } catch(...) {
         saveProject(L"last-recover");
         logWarn(L" Sorry, a error occurred while running NeoBESMS. The project loaded was exported to 'last-recover'.");

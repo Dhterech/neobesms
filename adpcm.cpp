@@ -1,4 +1,5 @@
 #include "types.h"
+
 static int clamp16(int32_t val) {
 	if(val > 32767) return 32767;
 	if(val < -32768) return -32768;
@@ -19,7 +20,6 @@ int decode_hist2 = 0;
 void decode_psx(uint8_t *buf, int16_t *outbuf, int channelspacing, int32_t first_sample, int32_t samples_to_do) {
 	int predict_nr, shift_factor, sample;
 	short scale;
-	int32_t sample_count;
 	uint8_t flag;
 
 	int framesin = first_sample/28;

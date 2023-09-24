@@ -2,11 +2,11 @@
 #define BES_SUGGEST_H
 
 #include "types.h"
-#include <vector>
 
 struct soundentry_t {
     u32 relativetime;
-    u32 animationid;
+    u16 animationid;
+    u16 unk;
     u16 soundid;
     u16 always_zero;
 };
@@ -31,7 +31,7 @@ struct suggestline_t {
     u32 coolmodethreshold;
 
     u32 localisations[4];
-    u32 always_zero;
+    u32 vs_count;
 };
 
 struct suggestline_t_pal {
@@ -48,15 +48,15 @@ struct suggestline_t_pal {
     u32 coolmodethreshold;
 
     u32 localisations[7];
-    u32 always_zero;
+    u32 vs_count;
 };
 
 struct e_suggestline_t {
     u32 owner;
     std::vector<suggestbutton_t> buttons;
 
-    u32 unk1;
-    u32 unk2;
+    u32 oopscount;
+    u32 ptr_oops;
 
     u32 timestamp_start;
     u32 timestamp_end;
@@ -64,7 +64,7 @@ struct e_suggestline_t {
     u32 coolmodethreshold;
 
     u32 localisations[7];
-    u32 always_zero;
+    u32 vs_count;
 
     bool containssubdot(u32 subdot);
 };
@@ -82,17 +82,18 @@ struct suggestvariant_t {
 
 struct e_suggestrecord_t {
     u32 type;
+    u32 address;
     u32 soundboardid;
     u32 lengthinsubdots;
     e_suggestvariant_t variants[17];
-    byte unk[0x48];
+    byte vs_data[0x48];
 };
 
 struct suggestrecord_t {
     u32 soundboardid;
     u32 lengthinsubdots;
     suggestvariant_t variants[17];
-    byte unk[0x48];
+    byte vs_data[0x48];
 };
 
 #define SCENECMD_SETCURSOR 0
@@ -100,29 +101,12 @@ struct suggestrecord_t {
 #define SCENECMD_SETGRADED 2
 #define SCENECMD_ACTIVATE 9
 
-union scenecommand_param_t {
-    byte bytes[14];
-    struct {
-        u16 owner_id;
-        u16 cursor_id;
-    } setcursor;
-    struct {
-        u16 nothing[5];
-        u32 record_addr;
-    } setrecord;
-    struct {
-        u16 type;
-        u32 data;
-    } activate;
-};
-
-struct scenecommand_t {
-    u16 cmd_id;
-    scenecommand_param_t parameters;
-};
-
 struct commandbuffer_t {
-    byte data[16];
+    u16 cmd_id;
+    u16 arg1;
+    u32 arg2;
+    u32 arg3;
+    u32 arg4;
 };
 
 struct scenemode_t {
@@ -136,7 +120,7 @@ struct scenemode_t {
     u32 reserved_timer2; /* Used by game engine */
     u32 subtitle_scene_id;
     u32 scene_id;
-    u32 unk[2]; /* Always zero? */
+    u32 unk[2]; /* Used by versus mode */
     u32 offset_in_ms;
     float bpm;
 };

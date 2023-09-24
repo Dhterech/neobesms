@@ -3,8 +3,6 @@
 
 #include "types.h"
 #include <Windows.h>
-#include <vector>
-#include <array>
 #include <dsound.h>
 
 extern LPDIRECTSOUND dsnd;

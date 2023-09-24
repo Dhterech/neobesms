@@ -2,7 +2,7 @@
 #define BES_CONSCR_H
 
 #include "types.h"
-#include <Windows.h>
+#include <windows.h>
 
 namespace conscr {
     void init();

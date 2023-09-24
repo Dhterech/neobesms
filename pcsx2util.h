@@ -13,45 +13,18 @@ u32 findbdbase(u32 resource_list_base);
 int getnumhd(u32 hdbase);
 
 void pcsx2DwnlRecord(u32 record_addr, e_suggestrecord_t &editor_record);
+void pcsx2ParseComRecords(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &commands, bool isVS);
 
-int pcsx2ReadRecords(
-    u32 stagecmd_start,
-    int count,
-    u32 type,
-    std::vector<e_suggestrecord_t> &records
-);
+void pcsx2GetComBuffers(std::vector<scenemode_t> &modes, std::vector<std::vector<commandbuffer_t>> &commands);
+void pcxs2GetModelist(u32 stagemode_start, int count, std::vector<scenemode_t> &modes);
 
-void pcsx2GetComBuffers(u32 stagemode_start, std::vector<commandbuffer_t> *buffers);
+void pcsx2GetSoundboards(u32 hdlistbase, u32 bdlistbase, u32 count, std::vector<e_soundboard_t> &sblist);
+void pcsx2GetKeytables(u32 keylistbase, int count, int sbbase, std::vector<e_soundboard_t> &sblist);
 
-int pcsx2GetRecFromModelist(
-    u32 stagemode_start,
-    std::vector<e_suggestrecord_t> &records,
-    bool isPAL
-);
-
-void pcsx2GetSoundboards(
-    u32 hdlistbase,
-    u32 bdlistbase,
-    u32 count,
-    std::vector<e_soundboard_t> &sblist
-);
-
-void pcsx2GetKeytables(
-    u32 keylistbase,
-    int count,
-    int sbbase,
-    std::vector<e_soundboard_t> &sblist
-);
-
-u32 pcsx2calcsize(
-    std::vector<e_suggestrecord_t> &records,
-    std::vector<commandbuffer_t> *commands,
-    int oopslen, bool isPAL);
-bool pcsx2upload(
-    std::vector<e_suggestrecord_t> &records,
-    std::vector<commandbuffer_t> *commands,
-    byte *oopsdat, int oopslen,
-    currentstage_t currentstage, bool isPAL, bool kSubs);
+u32 pcsx2calcsize(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &commands, int oopslen, int modelen, bool isPAL);
+bool pcsx2upload(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &commands, std::vector<scenemode_t> &modes, byte *oopsdat, int oopslen, int modelen, currentstage_t currentstage, bool isPAL, bool kSubs, bool isVSMode);
 bool olmupload(wchar_t *filename);
+
+void getProjectRecordAddresses(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &commands, int isVS);
 
 #endif // BES_PCSX2UTIL_H

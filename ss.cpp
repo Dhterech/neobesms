@@ -84,7 +84,7 @@ void sound_t::load(const e_soundboard_t &sb, const e_sound_t &snd) {
     this->sndbuf->Unlock(audbuf1, audbuf1len, audbuf2, audbuf2len);
 
     this->sndbuf->SetFrequency(snd.frequency);
-    this->sndbuf->SetVolume(10000);
+    //this->sndbuf->SetVolume(10000);
 
     sndbuf->Release();
     free(rawbuf);
@@ -123,7 +123,7 @@ void soundenv_t::play(int keyid) {
         this->lastkey[prog] = key;
 
         this->sounds[soundid].sndbuf->SetCurrentPosition(0);
-        this->sounds[soundid].sndbuf->SetVolume(10000);
+        //this->sounds[soundid].sndbuf->SetVolume(10000);
         this->sounds[soundid].sndbuf->Play(0,0,0);
     } catch(...) { return; }
 }
@@ -135,6 +135,7 @@ void soundenv_t::stopAll() {
             u16 lastkey = (this-> lastkey.size() != 0 ? this->lastkey[prog] : 0);
             u16 key = this->keys[i].key;
             
+            if(prog > this->prog.size()) return;
             if(lastkey != u16(~0)) {this->sounds[this->prog[prog][lastkey]].sndbuf->Stop();}
             this->lastkey[prog] = key;
         }
@@ -171,7 +172,7 @@ void loadticker() {
     desc.guid3DAlgorithm = GUID_NULL;
     desc.dwReserved = 0;
     desc.dwSize = sizeof(DSBUFFERDESC);
-    desc.dwFlags =DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME;
+    desc.dwFlags = DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLVOLUME;
     desc.lpwfxFormat = &wfx;
 
     IDirectSoundBuffer *tmp;

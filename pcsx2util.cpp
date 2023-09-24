@@ -131,7 +131,7 @@ void pcsx2DwnlSoundboard(u32 hdbase, u32 bdbase, u32 keybase, int numkeys, e_sou
     u32 vhbase = getvhbasefromhd(hdbase);
     u32 vhcount;
     u32 bdlen;
-    e_sound_t vhentry;
+    //e_sound_t vhentry;
 
     pcsx2reader::read(head + 0x10, &bdlen, 4);
 
@@ -143,7 +143,7 @@ void pcsx2DwnlSoundboard(u32 hdbase, u32 bdbase, u32 keybase, int numkeys, e_sou
     vhcount++;
 
     u32 vhindices = vhbase + 0x10;
-    u32 vhentries = vhindices + (vhcount * 4);
+    //u32 vhentries = vhindices + (vhcount * 4);
 
     sb.sounds.resize(vhcount);
     for(int i = 0; i < vhcount; i++) {
@@ -191,11 +191,14 @@ void ps2LineToEditor(const suggestline_t &ps2, const suggestline_t_pal &ps2p, e_
         pcsx2reader::read(loc, &editor.buttons[i], sizeof(suggestbutton_t));
     }
 
+    editor.ptr_oops = (isPAL ? ps2p.ptr_oops : ps2.ptr_oops);
+    editor.oopscount = (isPAL ? ps2p.oopscount : ps2.oopscount);
+
     editor.coolmodethreshold = (isPAL ? ps2p.coolmodethreshold : ps2.coolmodethreshold);
     for(int s = 0; s < (isPAL ? 7 : 4); s++) {editor.localisations[s] = (isPAL ? ps2p.localisations[s] : ps2.localisations[s]);}
     editor.timestamp_start = (isPAL ? ps2p.timestamp_start : ps2.timestamp_start);
     editor.timestamp_end = (isPAL ? ps2p.timestamp_end : ps2.timestamp_end);
-    editor.always_zero = 0;
+    editor.vs_count = (isPAL ? ps2p.vs_count : ps2.vs_count);
 }
 
 void ps2VariantToEditor(const suggestvariant_t &ps2, e_suggestvariant_t &editor) {
@@ -215,21 +218,18 @@ void ps2VariantToEditor(const suggestvariant_t &ps2, e_suggestvariant_t &editor)
 void ps2RecordToEditor(const suggestrecord_t &ps2, e_suggestrecord_t &editor) {
     editor.lengthinsubdots = ps2.lengthinsubdots;
     editor.soundboardid = ps2.soundboardid;
-    memcpy(editor.unk, ps2.unk, sizeof(editor.unk));
+    memcpy(editor.vs_data, ps2.vs_data, sizeof(editor.vs_data));
 
-    suggestvariant_t ps2variant;
-    for(int i = 0; i < 17; i++) {
+    for(int i = 0; i < 17; i++) { // Download variant
         ps2VariantToEditor(ps2.variants[i], editor.variants[i]);
         editor.variants[i].islinked = false;
         editor.variants[i].linknum = -1;
-    }
 
-    for(int i = 1; i < 17; i++) {
-        for(int k = 0; k < i; k++) {
+        for(int k = 0; k < i; k++) { // Check if its linked
             if(ps2.variants[i].ptr_lines == ps2.variants[k].ptr_lines) {
                 editor.variants[i].islinked = true;
                 editor.variants[i].linknum = k;
-                k = i; // End "k" loop
+                break;
             }
         }
     }
@@ -241,69 +241,71 @@ void pcsx2DwnlRecord(u32 record_addr, e_suggestrecord_t &editor_record) {
     ps2RecordToEditor(ps2_record, editor_record);
 }
 
-int pcsx2ReadRecords(u32 stagecmd_start, int count, u32 type, std::vector<e_suggestrecord_t> &records) {
-    u32 caddr = stagecmd_start;
-    u32 lastrecord = 0;
+void pcsx2ParseComRecords(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &scenecmds, bool isVS) {
     e_suggestrecord_t record;
-    u32 raddr;
-    int nrecords = 0;
 
-    for(int i = 0; i < count; i++, caddr += 0x10) {
-        u16 cmd;
-        pcsx2reader::read(caddr, &cmd, 2);
-
-        if(cmd == 0x1) {
-            pcsx2reader::read(caddr + 0xC, &raddr, 4);
-
-            if((raddr >= 0x1000000) && (raddr != lastrecord)) {
+    for(int type = 0; type < scenecmds.size(); type++) {
+        if(!isVS && (type == 2 || type == 3)) continue; // Skip BAD & Awful
+        for(const commandbuffer_t &buffer : scenecmds[type]) {
+            if(buffer.cmd_id != SCENECMD_SETRECORD && buffer.cmd_id != SCENECMD_ACTIVATE) continue;
+            if(buffer.cmd_id == SCENECMD_ACTIVATE && buffer.arg1 != 0xE) continue; // Get only preload record
+            
+            u32 raddr = buffer.cmd_id == SCENECMD_SETRECORD ? buffer.arg4 : buffer.arg2;
+            bool alreadyLoaded = false;
+            for(const e_suggestrecord_t &r : records) {if(r.address == raddr) {alreadyLoaded = true; break;}}
+            if(raddr > OLM_LINK_ADDRESS && !alreadyLoaded) {
                 pcsx2DwnlRecord(raddr, record);
                 record.type = type;
+                record.address = raddr;
                 records.push_back(record);
-                nrecords++;
-                lastrecord = raddr;
-            }
-        } else if(cmd == 0x9) {
-            u16 subcmd;
-            pcsx2reader::read(caddr + 0x2, &subcmd, 2);
-            if(subcmd == 0xE) { // Check for preload record command
-                pcsx2reader::read(caddr + 0x4, &raddr, 4);
-                if((raddr >= 0x1000000) && (raddr != lastrecord)) {
-                    pcsx2DwnlRecord(raddr, record);
-                    record.type = type;
-                    records.push_back(record);
-                    nrecords++;
-                    lastrecord = raddr;
-                }
             }
         }
     }
-	return records.size();
 }
 
-int pcsx2GetRecFromModelist(u32 stagemode_start, std::vector<e_suggestrecord_t> &records, bool extendedSub) {
-    scenemode_t modes[9];
-    pcsx2reader::read(stagemode_start, modes, sizeof(modes));
-
-    int acc = 0;
-    isPAL = extendedSub;
-    for(int i = 0; i < 9; i++) {
-        if(i == 2 || i == 3) { continue; }
-        acc += pcsx2ReadRecords(modes[i].ptr_scenecommands, modes[i].count_scenecommands, i, records);
-    }
-
-    return acc;
-}
-
-void pcsx2GetComBuffers(u32 stagemode_start, std::vector<commandbuffer_t> *buffers) {
-    scenemode_t modes[9];
-    pcsx2reader::read(stagemode_start, modes, sizeof(modes));
-
+void pcsx2GetComBuffers(std::vector<scenemode_t> &modes, std::vector<std::vector<commandbuffer_t>> &commands) {
     commandbuffer_t cb;
-    for(int i = 0; i < 9; i++) {
-	    buffers[i].clear();
+    commands.clear();
+
+    for(int i = 0; i < modes.size(); i++) {
+        std::vector<commandbuffer_t> modecbs;
         for(int k = 0; k < modes[i].count_scenecommands; k++) {
-            pcsx2reader::read(modes[i].ptr_scenecommands + (k * 0x10), cb.data, 16);
-            buffers[i].push_back(cb);
+            pcsx2reader::read(modes[i].ptr_scenecommands + (k * sizeof(commandbuffer_t)), &cb, sizeof(commandbuffer_t));
+            modecbs.push_back(cb);
+        }
+        commands.push_back(modecbs);
+    }
+}
+
+void pcxs2GetModelist(u32 stagemode_start, int count, std::vector<scenemode_t> &modes) {
+    scenemode_t scene;
+    modes.clear();
+
+    for(int i = 0; i < count; i++) {
+        pcsx2reader::read(stagemode_start + (i * sizeof(scene)), &scene, sizeof(scene));
+        modes.push_back(scene);
+    }
+}
+
+void getProjectRecordAddresses(std::vector<e_suggestrecord_t> &records, std::vector<std::vector<commandbuffer_t>> &commands, int isVS) {
+    int recordCount = 0;
+    for(int type = 0; type < commands.size(); type++) {
+        if(!isVS && (type == 2 || type == 3)) continue; // Skip BAD & Awful
+        for(const commandbuffer_t &buffer : commands[type]) {
+            if(buffer.cmd_id != SCENECMD_SETRECORD && buffer.cmd_id != SCENECMD_ACTIVATE) continue;
+            if(buffer.cmd_id == SCENECMD_ACTIVATE && buffer.arg1 != 0xE) continue; // Get only preload record
+
+            u32 raddr = buffer.cmd_id == SCENECMD_SETRECORD ? buffer.arg4 : buffer.arg2;
+            bool alreadyLoaded = false;
+            for(const e_suggestrecord_t &r : records) {if(r.address == raddr) {alreadyLoaded = true; break;}}
+            if(raddr > OLM_LINK_ADDRESS && !alreadyLoaded) { // ugly ptr2besms fixup :(
+                if(records[recordCount].type == 0 && recordCount > 1) { // skip certainly cloned records
+                    while(records[recordCount].type == 0) {recordCount++;}
+                    continue;
+                }
+                records[recordCount].address = raddr;
+                recordCount++;
+            }
         }
     }
 }

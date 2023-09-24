@@ -1,6 +1,5 @@
 #ifndef BES_STAGEINFO_H
 #define BES_STAGEINFO_H
-#include <array>
 #include "types.h"
 
 struct currentstage_t {
@@ -15,6 +14,7 @@ struct currentstage_t {
 struct regioninfo_t {
     u32 stagemodelistbase;
     u32 keytablebase;
+    u32 keytablesize;
 };
 
 struct stageinfo_t {
@@ -23,6 +23,6 @@ struct stageinfo_t {
     regioninfo_t regions[3];
 };
 
-extern stageinfo_t stages[8];
+extern stageinfo_t stages[18];
 
 #endif // BES_STAGEINFO_H
